@@ -46,6 +46,14 @@ impl Lexer {
         return self.ch;
     }
 
+    pub fn peek_char(&self) -> char {
+        if self.read_position >= self.input.len() {
+            return '\0';
+        } else {
+            return self.input.chars().nth(self.read_position).unwrap();
+        }
+    }
+
     fn skip_whitespace(&mut self) {
         while matches!(self.ch, ' ' | '\t' | '\n' | '\r') {
             self.next_char();
@@ -59,8 +67,42 @@ impl Lexer {
         let mut has_read = false;
 
         let token = match self.ch {
-            '=' => Token::new(TokenType::ASSIGN),
+            '=' => {
+                if self.peek_char() == '=' {
+                    self.next_char();
+                    Token::new(TokenType::EQ)
+                } else {
+                    Token::new(TokenType::ASSIGN)
+                }
+            },
             '+' => Token::new(TokenType::PLUS),
+            '-' => Token::new(TokenType::MINUS),
+            '!' => {
+                if self.peek_char() == '=' {
+                    self.next_char();
+                    Token::new(TokenType::NOT_EQ)
+                } else {
+                    Token::new(TokenType::BANG)
+                }
+            },
+            '*' => Token::new(TokenType::ASTERISK),
+            '/' => Token::new(TokenType::SLASH),
+            '<' => {
+                if self.peek_char() == '=' {
+                    self.next_char();
+                    Token::new(TokenType::LTE)
+                } else {
+                    Token::new(TokenType::LT)
+                }
+            },
+            '>' => {
+                if self.peek_char() == '=' {
+                    self.next_char();
+                    Token::new(TokenType::GTE)
+                } else {
+                    Token::new(TokenType::GT)
+                }
+            },
             ',' => Token::new(TokenType::COMMA),
             ';' => Token::new(TokenType::SEMICOLON),
             '(' => Token::new(TokenType::LPAREN),
@@ -80,6 +122,11 @@ impl Lexer {
                 let token_type = match literal.as_str() {
                     "fn" => TokenType::FUNCTION,
                     "let" => TokenType::LET,
+                    "true" => TokenType::TRUE,
+                    "false" => TokenType::FALSE,
+                    "if" => TokenType::IF,
+                    "else" => TokenType::ELSE,
+                    "return" => TokenType::RETURN,
                     _ => TokenType::IDENT(literal),
                 };
 
@@ -115,16 +162,26 @@ mod tests {
 
     #[test]
     fn basic_tokens() {
-        let input = "=+(){},;";
+        let input = "=+-*/!<>(){},;==!=<=>=";
         let expected_tokens = vec![
             TokenType::ASSIGN,
             TokenType::PLUS,
+            TokenType::MINUS,
+            TokenType::ASTERISK,
+            TokenType::SLASH,
+            TokenType::BANG,
+            TokenType::LT,
+            TokenType::GT,
             TokenType::LPAREN,
             TokenType::RPAREN,
             TokenType::LBRACE,
             TokenType::RBRACE,
             TokenType::COMMA,
             TokenType::SEMICOLON,
+            TokenType::EQ,
+            TokenType::NOT_EQ,
+            TokenType::LTE,
+            TokenType::GTE,
             TokenType::EOF,
         ];
 
@@ -140,7 +197,7 @@ mod tests {
     #[test]
     fn addition() {
         let input = "
-            let five= 5;
+            let five = 5;
             let ten = 10;
 
             let add = fn(x, y) {
@@ -148,6 +205,12 @@ mod tests {
             };
 
             let result = add(five, ten);
+
+            if (5 < 10) {
+                return true;
+            } else {
+                return false;
+            }
         ";
         let expected_tokens = vec![
             Token::new(TokenType::LET),
@@ -192,12 +255,35 @@ mod tests {
             Token::new(TokenType::RPAREN),
             Token::new(TokenType::SEMICOLON),
 
+            Token::new(TokenType::IF),
+            Token::new(TokenType::LPAREN),
+            Token::new(TokenType::INT(5)),
+            Token::new(TokenType::LT),
+            Token::new(TokenType::INT(10)),
+            Token::new(TokenType::RPAREN),
+            Token::new(TokenType::LBRACE),
+
+            Token::new(TokenType::RETURN),
+            Token::new(TokenType::TRUE),
+            Token::new(TokenType::SEMICOLON),
+
+            Token::new(TokenType::RBRACE),
+            Token::new(TokenType::ELSE),
+            Token::new(TokenType::LBRACE),
+
+            Token::new(TokenType::RETURN),
+            Token::new(TokenType::FALSE),
+            Token::new(TokenType::SEMICOLON),
+
+            Token::new(TokenType::RBRACE),
+
             Token::new(TokenType::EOF),
         ];
 
         let mut lexer = Lexer::new(input.to_string());
         for expected_token in expected_tokens {
             let token = lexer.next_token();
+            println!("{:?} {:?}", token.kind, expected_token.kind);
             assert_eq!(token.kind, expected_token.kind);
 
             match token.kind {
