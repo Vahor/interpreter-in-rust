@@ -10,6 +10,11 @@ pub struct Lexer {
     read_position: usize,
     /// current char under examination
     ch: char,
+
+    // current line
+    line: u32,
+    // current column
+    column: u32,
 }
 
 impl Debug for Lexer {
@@ -35,9 +40,13 @@ impl Lexer {
             position: 0,
             read_position: 0,
             ch: '\0',
+            line: 1,
+            column: 1,
         };
 
         lexer.next_char();
+        lexer.column -= 1;
+
         return lexer;
     }
 
@@ -47,6 +56,8 @@ impl Lexer {
         self.read_position = 0;
         self.ch = '\0';
         self.next_char();
+        self.line = 1;
+        self.column = 1;
     }
 
     pub fn next_char(&mut self) -> char {
@@ -54,9 +65,11 @@ impl Lexer {
             self.ch = '\0';
         } else {
             self.ch = self.input.chars().nth(self.read_position).unwrap();
+
+            self.position = self.read_position;
+            self.read_position += 1;
+            self.column += 1;
         }
-        self.position = self.read_position;
-        self.read_position += 1;
 
         return self.ch;
     }
@@ -71,7 +84,12 @@ impl Lexer {
 
     fn skip_whitespace(&mut self) {
         while matches!(self.ch, ' ' | '\t' | '\n' | '\r') {
+            let is_newline = self.ch == '\n';
             self.next_char();
+            if is_newline {
+                self.line += 1;
+                self.column = 1;
+            }
         }
     }
 
@@ -85,46 +103,46 @@ impl Lexer {
             '=' => {
                 if self.peek_char() == '=' {
                     self.next_char();
-                    Token::new(TokenType::EQ)
+                    Token::new(TokenType::EQ, self.line, self.column)
                 } else {
-                    Token::new(TokenType::ASSIGN)
+                    Token::new(TokenType::ASSIGN, self.line, self.column)
                 }
-            },
-            '+' => Token::new(TokenType::PLUS),
-            '-' => Token::new(TokenType::MINUS),
+            }
+            '+' => Token::new(TokenType::PLUS, self.line, self.column),
+            '-' => Token::new(TokenType::MINUS, self.line, self.column),
             '!' => {
                 if self.peek_char() == '=' {
                     self.next_char();
-                    Token::new(TokenType::NOT_EQ)
+                    Token::new(TokenType::NOT_EQ, self.line, self.column)
                 } else {
-                    Token::new(TokenType::BANG)
+                    Token::new(TokenType::BANG, self.line, self.column)
                 }
-            },
-            '*' => Token::new(TokenType::ASTERISK),
-            '/' => Token::new(TokenType::SLASH),
+            }
+            '*' => Token::new(TokenType::ASTERISK, self.line, self.column),
+            '/' => Token::new(TokenType::SLASH, self.line, self.column),
             '<' => {
                 if self.peek_char() == '=' {
                     self.next_char();
-                    Token::new(TokenType::LTE)
+                    Token::new(TokenType::LTE, self.line, self.column)
                 } else {
-                    Token::new(TokenType::LT)
+                    Token::new(TokenType::LT, self.line, self.column)
                 }
-            },
+            }
             '>' => {
                 if self.peek_char() == '=' {
                     self.next_char();
-                    Token::new(TokenType::GTE)
+                    Token::new(TokenType::GTE, self.line, self.column)
                 } else {
-                    Token::new(TokenType::GT)
+                    Token::new(TokenType::GT, self.line, self.column)
                 }
-            },
-            ',' => Token::new(TokenType::COMMA),
-            ';' => Token::new(TokenType::SEMICOLON),
-            '(' => Token::new(TokenType::LPAREN),
-            ')' => Token::new(TokenType::RPAREN),
-            '{' => Token::new(TokenType::LBRACE),
-            '}' => Token::new(TokenType::RBRACE),
-            '\0' => Token::new(TokenType::EOF),
+            }
+            ',' => Token::new(TokenType::COMMA, self.line, self.column),
+            ';' => Token::new(TokenType::SEMICOLON, self.line, self.column),
+            '(' => Token::new(TokenType::LPAREN, self.line, self.column),
+            ')' => Token::new(TokenType::RPAREN, self.line, self.column),
+            '{' => Token::new(TokenType::LBRACE, self.line, self.column),
+            '}' => Token::new(TokenType::RBRACE, self.line, self.column),
+            '\0' => Token::new(TokenType::EOF, self.line, self.column),
             'a'..='z' | 'A'..='Z' | '_' => {
                 has_read = true;
                 let start = self.position;
@@ -145,7 +163,7 @@ impl Lexer {
                     _ => TokenType::IDENT(literal),
                 };
 
-                Token::new(token_type)
+                Token::new(token_type, self.line, self.column)
             }
             '0'..='9' => {
                 has_read = true;
@@ -155,9 +173,9 @@ impl Lexer {
                 }
                 let literal = self.input[start..self.position].to_string();
 
-                Token::new(TokenType::INT(literal.parse::<i64>().unwrap()))
+                Token::new(TokenType::INT(literal.parse::<i64>().unwrap()), self.line, self.column)
             }
-            v => Token::new(TokenType::ILLEGAL(v)),
+            v => Token::new(TokenType::ILLEGAL(v), self.line, self.column),
         };
 
         // Read next char if not literal or number
@@ -228,71 +246,71 @@ mod tests {
             }
         ";
         let expected_tokens = vec![
-            Token::new(TokenType::LET),
-            Token::new(TokenType::IDENT("five".to_string())),
-            Token::new(TokenType::ASSIGN),
-            Token::new(TokenType::INT(5)),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::LET),
+            Token::with_type(TokenType::IDENT("five".to_string())),
+            Token::with_type(TokenType::ASSIGN),
+            Token::with_type(TokenType::INT(5)),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::LET),
-            Token::new(TokenType::IDENT("ten".to_string())),
-            Token::new(TokenType::ASSIGN),
-            Token::new(TokenType::INT(10)),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::LET),
+            Token::with_type(TokenType::IDENT("ten".to_string())),
+            Token::with_type(TokenType::ASSIGN),
+            Token::with_type(TokenType::INT(10)),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::LET),
-            Token::new(TokenType::IDENT("add".to_string())),
-            Token::new(TokenType::ASSIGN),
-            Token::new(TokenType::FUNCTION),
-            Token::new(TokenType::LPAREN),
-            Token::new(TokenType::IDENT("x".to_string())),
-            Token::new(TokenType::COMMA),
-            Token::new(TokenType::IDENT("y".to_string())),
-            Token::new(TokenType::RPAREN),
-            Token::new(TokenType::LBRACE),
+            Token::with_type(TokenType::LET),
+            Token::with_type(TokenType::IDENT("add".to_string())),
+            Token::with_type(TokenType::ASSIGN),
+            Token::with_type(TokenType::FUNCTION),
+            Token::with_type(TokenType::LPAREN),
+            Token::with_type(TokenType::IDENT("x".to_string())),
+            Token::with_type(TokenType::COMMA),
+            Token::with_type(TokenType::IDENT("y".to_string())),
+            Token::with_type(TokenType::RPAREN),
+            Token::with_type(TokenType::LBRACE),
 
-            Token::new(TokenType::IDENT("x".to_string())),
-            Token::new(TokenType::PLUS),
-            Token::new(TokenType::IDENT("y".to_string())),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::IDENT("x".to_string())),
+            Token::with_type(TokenType::PLUS),
+            Token::with_type(TokenType::IDENT("y".to_string())),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::RBRACE),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::RBRACE),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::LET),
-            Token::new(TokenType::IDENT("result".to_string())),
-            Token::new(TokenType::ASSIGN),
-            Token::new(TokenType::IDENT("add".to_string())),
-            Token::new(TokenType::LPAREN),
-            Token::new(TokenType::IDENT("five".to_string())),
-            Token::new(TokenType::COMMA),
-            Token::new(TokenType::IDENT("ten".to_string())),
-            Token::new(TokenType::RPAREN),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::LET),
+            Token::with_type(TokenType::IDENT("result".to_string())),
+            Token::with_type(TokenType::ASSIGN),
+            Token::with_type(TokenType::IDENT("add".to_string())),
+            Token::with_type(TokenType::LPAREN),
+            Token::with_type(TokenType::IDENT("five".to_string())),
+            Token::with_type(TokenType::COMMA),
+            Token::with_type(TokenType::IDENT("ten".to_string())),
+            Token::with_type(TokenType::RPAREN),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::IF),
-            Token::new(TokenType::LPAREN),
-            Token::new(TokenType::INT(5)),
-            Token::new(TokenType::LT),
-            Token::new(TokenType::INT(10)),
-            Token::new(TokenType::RPAREN),
-            Token::new(TokenType::LBRACE),
+            Token::with_type(TokenType::IF),
+            Token::with_type(TokenType::LPAREN),
+            Token::with_type(TokenType::INT(5)),
+            Token::with_type(TokenType::LT),
+            Token::with_type(TokenType::INT(10)),
+            Token::with_type(TokenType::RPAREN),
+            Token::with_type(TokenType::LBRACE),
 
-            Token::new(TokenType::RETURN),
-            Token::new(TokenType::TRUE),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::RETURN),
+            Token::with_type(TokenType::TRUE),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::RBRACE),
-            Token::new(TokenType::ELSE),
-            Token::new(TokenType::LBRACE),
+            Token::with_type(TokenType::RBRACE),
+            Token::with_type(TokenType::ELSE),
+            Token::with_type(TokenType::LBRACE),
 
-            Token::new(TokenType::RETURN),
-            Token::new(TokenType::FALSE),
-            Token::new(TokenType::SEMICOLON),
+            Token::with_type(TokenType::RETURN),
+            Token::with_type(TokenType::FALSE),
+            Token::with_type(TokenType::SEMICOLON),
 
-            Token::new(TokenType::RBRACE),
+            Token::with_type(TokenType::RBRACE),
 
-            Token::new(TokenType::EOF),
+            Token::with_type(TokenType::EOF),
         ];
 
         let mut lexer = Lexer::new(input.to_string());

@@ -107,21 +107,27 @@ impl Into<Precedence> for TokenType {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Token {
     pub kind: TokenType,
+    pub line: u32,
+    pub column: u32,
 }
 
 impl Default for Token {
     fn default() -> Self {
-        return Self { kind: TokenType::EOF };
+        return Self { kind: TokenType::EOF, line: 0, column: 0 };
     }
 }
 
 impl Token {
-    pub fn new(kind: TokenType) -> Self {
-        return Self { kind };
+    pub fn with_type(kind: TokenType) -> Self {
+        return Self { kind, line: 0, column: 0 };
+    }
+
+    pub fn new(kind: TokenType, line: u32, column: u32) -> Self {
+        return Self { kind, line, column };
     }
 
     pub fn to_string(&self) -> String {
-        return format!("{}", self.kind);
+        return format!("{} at line {}, column {}", self.kind, self.line, self.column);
     }
 
     pub fn to_precedence(&self) -> Precedence {
