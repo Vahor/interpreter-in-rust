@@ -1,9 +1,9 @@
 use std::fmt::Display;
+use crate::precedence::Precedence;
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
-
     ILLEGAL(char),
     EOF,
 
@@ -80,8 +80,29 @@ impl Display for TokenType {
             TokenType::RETURN => write!(f, "RETURN"),
         };
     }
-
 }
+
+
+impl Into<Precedence> for TokenType {
+    fn into(self) -> Precedence {
+        return match self {
+            TokenType::EQ => Precedence::EQUALS,
+            TokenType::NOT_EQ => Precedence::EQUALS,
+            TokenType::LT => Precedence::LESSGREATER,
+            TokenType::GT => Precedence::LESSGREATER,
+            TokenType::LTE => Precedence::LESSGREATER,
+            TokenType::GTE => Precedence::LESSGREATER,
+            TokenType::PLUS => Precedence::SUM,
+            TokenType::MINUS => Precedence::SUM,
+            TokenType::SLASH => Precedence::PRODUCT,
+            TokenType::ASTERISK => Precedence::PRODUCT,
+            TokenType::LPAREN => Precedence::CALL,
+            _ => Precedence::LOWEST,
+        };
+    }
+}
+
+
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Token {
@@ -101,5 +122,9 @@ impl Token {
 
     pub fn to_string(&self) -> String {
         return format!("{}", self.kind);
+    }
+
+    pub fn to_precedence(&self) -> Precedence {
+        return self.kind.clone().into();
     }
 }
