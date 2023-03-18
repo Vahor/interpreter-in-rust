@@ -6,6 +6,13 @@ pub enum Expression {
     StringLiteral(String),
     IntegerLiteral(i64),
 
+    Identifier(String),
+
+    PrefixExpression {
+        operator: String,
+        right: Box<Expression>,
+    },
+
     GroupedExpression {
         expression: Box<Expression>,
     },
@@ -22,6 +29,8 @@ impl Display for Expression {
         return match self {
             Expression::StringLiteral(string) => write!(f, "{}", string),
             Expression::IntegerLiteral(int) => write!(f, "{}", int),
+            Expression::Identifier(identifier) => write!(f, "{}", identifier),
+            Expression::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
             Expression::GroupedExpression { expression } => write!(f, "({})", expression),
             Expression::OperatorExpression { left, operator, right } => write!(f, "{} {} {}", left, operator, right),
         };
