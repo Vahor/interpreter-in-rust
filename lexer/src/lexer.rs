@@ -2,13 +2,14 @@ use std::fmt::Debug;
 
 use crate::token::{Token, TokenType};
 
-struct Lexer {
+pub struct Lexer {
     input: String,
+    /// current position in input (points to current char)
     position: usize,
-    // current position in input (points to current char)
+    /// current reading position in input (after current char)
     read_position: usize,
-    // current reading position in input (after current char)
-    ch: char, // current char under examination
+    /// current char under examination
+    ch: char,
 }
 
 impl Debug for Lexer {
@@ -18,6 +19,12 @@ impl Debug for Lexer {
             .field("read_position", &self.read_position)
             .field("ch", &self.ch)
             .finish()
+    }
+}
+
+impl Default for Lexer {
+    fn default() -> Self {
+        return Self::new("".to_string());
     }
 }
 
@@ -32,6 +39,14 @@ impl Lexer {
 
         lexer.next_char();
         return lexer;
+    }
+
+    pub fn reset(&mut self, input: String) {
+        self.input = input;
+        self.position = 0;
+        self.read_position = 0;
+        self.ch = '\0';
+        self.next_char();
     }
 
     pub fn next_char(&mut self) -> char {
@@ -142,7 +157,7 @@ impl Lexer {
 
                 Token::new(TokenType::INT(literal.parse::<i64>().unwrap()))
             }
-            _ => Token::new(TokenType::ILLEGAL),
+            v => Token::new(TokenType::ILLEGAL(v)),
         };
 
         // Read next char if not literal or number

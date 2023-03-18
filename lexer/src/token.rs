@@ -1,10 +1,8 @@
-use anyhow::Result;
-
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
 
-    ILLEGAL,
+    ILLEGAL(char),
     EOF,
 
     // Identifiers + literals
@@ -57,7 +55,7 @@ impl Token {
 
     pub fn to_string(&self) -> String {
         return match &self.kind {
-            TokenType::ILLEGAL => "ILLEGAL".to_string(),
+            TokenType::ILLEGAL(illegal) => "ILLEGAL: (".to_string() + illegal.to_string().as_str() + ")",
             TokenType::EOF => "EOF".to_string(),
             TokenType::IDENT(ident) => ident.to_string(),
             TokenType::INT(int) => int.to_string(),
