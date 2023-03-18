@@ -5,6 +5,7 @@ pub enum Expression {
 
     StringLiteral(String),
     IntegerLiteral(i64),
+    BooleanLiteral(bool),
 
     Identifier(String),
 
@@ -44,6 +45,7 @@ impl Display for Expression {
         return match self {
             Expression::StringLiteral(string) => write!(f, "{}", string),
             Expression::IntegerLiteral(int) => write!(f, "{}", int),
+            Expression::BooleanLiteral(boolean) => write!(f, "{}", boolean),
             Expression::Identifier(identifier) => write!(f, "{}", identifier),
             Expression::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
             Expression::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),

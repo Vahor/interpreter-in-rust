@@ -2,7 +2,7 @@ use log::{debug, error, warn};
 use thiserror::Error;
 
 use ast::expression::Expression;
-use ast::expression::Expression::IntegerLiteral;
+use ast::expression::Expression::{BooleanLiteral, IntegerLiteral};
 use ast::program::Program;
 use ast::statement::{ReturnStatementData, Statement};
 use lexer::lexer::Lexer;
@@ -85,6 +85,9 @@ impl Parser {
             TokenType::INT(i) => Some(IntegerLiteral(*i)),
             TokenType::IDENT(ident) => Some(Expression::Identifier(ident.to_string())),
             TokenType::BANG | TokenType::PLUS | TokenType::MINUS => self.parse_prefix_expression(),
+            TokenType::TRUE => Some(BooleanLiteral(true)),
+            TokenType::FALSE => Some(BooleanLiteral(false)),
+            TokenType::LPAREN => self.parse_grouped_expression(),
             _ => None
         };
 
@@ -142,6 +145,21 @@ impl Parser {
             left: Box::new(left),
             right: Box::new(right.unwrap()),
         })
+    }
+
+    fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        self.next_token(); // (peek) Skip past the LPAREN
+        let expression = self.parse_expression(&Precedence::LOWEST);
+        if expression.is_none() {
+            return None;
+        }
+
+        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            return None;
+        }
+
+        self.next_token(); // (peek) Skip past the RPAREN
+        expression
     }
 
     fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
@@ -283,16 +301,15 @@ mod tests {
     }
 
 
-    #[ignore]
     #[test]
     fn test_let_statements_literal() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
 
+        // let name = "John";
         let input = r#"
-        let x = 5;
-        let y = 10;
-        let foobar = 838383;
+        let age = 30;
+        let isMale = true;
         "#;
 
         let lexer = Lexer::new(input.to_string());
@@ -304,14 +321,13 @@ mod tests {
         let program = program.unwrap();
 
 
-        assert_eq!(program.statements.len(), 3);
+        assert_eq!(program.statements.len(), 2);
 
-        asset_let_statement(&program.statements[0], "x", &IntegerLiteral(5));
-        asset_let_statement(&program.statements[1], "y", &IntegerLiteral(10));
-        asset_let_statement(&program.statements[2], "foobar", &IntegerLiteral(838383));
+        asset_let_statement(&program.statements[0], "age", &IntegerLiteral(30));
+        asset_let_statement(&program.statements[1], "isMale", &BooleanLiteral(true));
+        // asset_let_statement(&program.statements[2], "name", &Expression::StringLiteral("John".to_string()));
     }
 
-    #[ignore]
     #[test]
     fn test_return_statements() {
         std::env::set_var("RUST_LOG", "trace");
@@ -338,7 +354,6 @@ mod tests {
         asset_return_statement(&program.statements[2], &IntegerLiteral(993322));
     }
 
-    #[ignore]
     #[test]
     fn test_identifier_expression() {
         std::env::set_var("RUST_LOG", "trace");
@@ -364,7 +379,6 @@ mod tests {
     }
 
 
-    #[ignore]
     #[test]
     fn test_prefix_expressions() {
         std::env::set_var("RUST_LOG", "trace");
@@ -374,9 +388,9 @@ mod tests {
         !5;
         -15;
         !-a;
+        !true;
+        !false;
         "#;
-        // !true;
-        // !false;
 
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
@@ -386,11 +400,13 @@ mod tests {
 
         let program = program.unwrap();
 
-        assert_eq!(program.statements.len(), 3);
+        assert_eq!(program.statements.len(), 5);
 
         asset_prefix_expression(&program.statements[0], "!", &IntegerLiteral(5));
         asset_prefix_expression(&program.statements[1], "-", &IntegerLiteral(15));
         asset_prefix_expression(&program.statements[2], "!", &prefix_expression("-".to_string(), Identifier("a".to_string())));
+        asset_prefix_expression(&program.statements[3], "!", &BooleanLiteral(true));
+        asset_prefix_expression(&program.statements[4], "!", &BooleanLiteral(false));
     }
 
     #[test]
@@ -420,6 +436,16 @@ mod tests {
         5 > 4 == 3 < 4;
         5 < 4 != 3 > 4;
         3 + 4 * 5 == 3 * 1 + 4 * 5;
+
+        3 > 5 == false;
+        3 < 5 == true;
+        true != false;
+
+        1 + (2 + 3) + 4;
+        (5 + 5) * 2;
+        2 / (5 + 5);
+        -(5 + 5);
+        !(true == true);
         "#;
 
 
@@ -431,11 +457,11 @@ mod tests {
 
         let program = program.unwrap();
 
-        program.to_string().lines().collect::<Vec<&str>>().iter().enumerate().for_each(|(i, line)| {
-            warn!("{}: {}", i, line);
-        });
+        // program.to_string().lines().collect::<Vec<&str>>().iter().enumerate().for_each(|(i, line)| {
+        //     warn!("{}: {}", i, line);
+        // });
 
-        assert_eq!(program.statements.len(), 20);
+        assert_eq!(program.statements.len(), 28);
 
         assert_infix_expression(&program.statements[0], &IntegerLiteral(5), "+", &IntegerLiteral(5));
         assert_infix_expression(&program.statements[1], &IntegerLiteral(5), "-", &IntegerLiteral(5));
@@ -457,6 +483,17 @@ mod tests {
         assert_eq!(&program.statements[17].to_string(), "((5 > 4) == (3 < 4));");
         assert_eq!(&program.statements[18].to_string(), "((5 < 4) != (3 > 4));");
         assert_eq!(&program.statements[19].to_string(), "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));");
+
+        assert_eq!(&program.statements[20].to_string(), "((3 > 5) == false);");
+        assert_eq!(&program.statements[21].to_string(), "((3 < 5) == true);");
+        assert_eq!(&program.statements[22].to_string(), "(true != false);");
+
+        assert_eq!(&program.statements[23].to_string(), "((1 + (2 + 3)) + 4);");
+        assert_eq!(&program.statements[24].to_string(), "((5 + 5) * 2);");
+        assert_eq!(&program.statements[25].to_string(), "(2 / (5 + 5));");
+        assert_eq!(&program.statements[26].to_string(), "(-(5 + 5));");
+        assert_eq!(&program.statements[27].to_string(), "(!(true == true));");
+
 
     }
 }
