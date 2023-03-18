@@ -384,10 +384,12 @@ checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 name = "parser"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ast",
  "env_logger",
  "lexer",
  "log",
+ "thiserror",
 ]
 
 [[package]]

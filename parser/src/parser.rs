@@ -1,6 +1,8 @@
 use log::{debug, error, warn};
+use thiserror::Error;
+
 use ast::expression::Expression;
-use ast::expression::Expression::{IntegerLiteral, StringLiteral};
+use ast::expression::Expression::{IntegerLiteral};
 use ast::program::Program;
 use ast::statement::{LetStatementData, Statement};
 use lexer::lexer::Lexer;
@@ -11,6 +13,18 @@ pub struct Parser {
     pub lexer: Lexer,
     pub cur_token: Token,
     pub peek_token: Token,
+}
+
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("Expected {expected:?}, got {actual:?}")]
+    Expected { expected: String, actual: TokenType },
+
+    #[error("Unexpected token {token:?}")]
+    UnexpectedToken { token: TokenType },
+
+    #[error("Unknown error")]
+    Unknown,
 }
 
 impl Parser {
@@ -33,27 +47,31 @@ impl Parser {
         self.peek_token = self.lexer.next_token();
     }
 
-    pub fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> Result<Program, ParserError> {
         let mut program = Program::default();
         while !matches!(&self.cur_token.kind, TokenType::EOF) {
             let stmt = self.parse_statement();
-            if let Some(stmt) = stmt {
+            if stmt.is_ok() {
+                let stmt = stmt.unwrap();
                 debug!("got statement: {:?}", stmt);
                 program.statements.push(stmt);
             } else {
-                error!("Failed to parse statement {:?}", self.cur_token.kind);
+                let err = stmt.err().unwrap_or(ParserError::Unknown);
+                error!("got error: {:?}", err);
+                return Err(err);
             }
             self.next_token();
         }
-        program
+
+        Ok(program)
     }
 
-    fn parse_statement(&mut self) -> Option<Statement> {
+    fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         match &self.cur_token.kind {
             TokenType::LET => self.parse_let_statement(),
             // TokenType::RETURN => self.parse_return_statement(),
             // _ => self.parse_expression_statement(),
-            _ => None
+            _ => Err(ParserError::UnexpectedToken { token: self.cur_token.kind.clone() }),
         }
     }
 
@@ -64,20 +82,16 @@ impl Parser {
         }
     }
 
-    fn expect_peek(&mut self, kind: TokenType) -> bool {
-        if self.peek_token.kind == kind {
-            self.next_token();
-            true
-        } else {
-            warn!("Expected {:?}, got {:?}", kind, self.peek_token.kind);
-            false
+    fn expected_error(&self, expected: String) -> ParserError {
+        ParserError::Expected {
+            expected: expected.to_string(),
+            actual: self.peek_token.kind.clone(),
         }
     }
 
-
-    fn parse_let_statement(&mut self) -> Option<Statement> {
+    fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
         if !matches!(&self.peek_token.kind, TokenType::IDENT(_)) {
-            panic!("Expected IDENT, got {:?}", &self.peek_token.kind);
+            return Err(self.expected_error("IDENT".to_string()));
         }
         self.next_token(); // (peek) Skip past the LET
 
@@ -89,34 +103,34 @@ impl Parser {
         self.next_token(); // (peek) Skip past the IDENT
 
         if !matches!(self.cur_token.kind, TokenType::ASSIGN) {
-            panic!("Expected ASSIGN, got {:?}", self.peek_token.kind);
+            return Err(self.expected_error(TokenType::ASSIGN.to_string()));
         }
         self.next_token(); // (peek) Skip past the ASSIGN
 
         let value = self.parse_expression();
 
         if value.is_none() {
-            panic!("Expected expression, got {:?}", self.cur_token.kind);
+            return Err(self.expected_error("Expression".to_string()));
         }
         self.next_token(); // (peek) Skip past the value
 
         if !matches!(self.cur_token.kind, TokenType::SEMICOLON) {
-            panic!("Expected SEMICOLON, got {:?}", self.cur_token.kind);
+            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
         }
 
-        Some(Statement::LetStatement(LetStatementData {
+        Ok(Statement::LetStatement(LetStatementData {
             identifier,
             value: value.expect("Should have been checked above"),
         }))
-
     }
 }
 
 #[cfg(test)]
 mod tests {
     use ast::expression::Expression::IntegerLiteral;
-    use super::*;
     use lexer::lexer::Lexer;
+
+    use super::*;
 
     fn asset_let_statement(statement: &Statement, ident: &str, exp: &Expression) {
         match &statement {
@@ -145,12 +159,15 @@ mod tests {
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
 
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
 
         assert_eq!(program.statements.len(), 3);
 
         asset_let_statement(&program.statements[0], "x", &IntegerLiteral(5));
         asset_let_statement(&program.statements[1], "y", &IntegerLiteral(10));
         asset_let_statement(&program.statements[2], "foobar", &IntegerLiteral(838383));
-
     }
 }

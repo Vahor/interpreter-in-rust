@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
@@ -44,6 +46,43 @@ pub enum TokenType {
     RETURN,
 }
 
+impl Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return match self {
+            TokenType::ILLEGAL(illegal) => write!(f, "ILLEGAL: {}", illegal),
+            TokenType::EOF => write!(f, "EOF"),
+            TokenType::IDENT(ident) => write!(f, "IDENT: {}", ident),
+            TokenType::INT(int) => write!(f, "INT: {}", int),
+            TokenType::ASSIGN => write!(f, "="),
+            TokenType::PLUS => write!(f, "+"),
+            TokenType::MINUS => write!(f, "-"),
+            TokenType::BANG => write!(f, "!"),
+            TokenType::ASTERISK => write!(f, "*"),
+            TokenType::SLASH => write!(f, "/"),
+            TokenType::LT => write!(f, "<"),
+            TokenType::GT => write!(f, ">"),
+            TokenType::LTE => write!(f, "<="),
+            TokenType::GTE => write!(f, ">="),
+            TokenType::EQ => write!(f, "=="),
+            TokenType::NOT_EQ => write!(f, "!="),
+            TokenType::COMMA => write!(f, ","),
+            TokenType::SEMICOLON => write!(f, ";"),
+            TokenType::LPAREN => write!(f, "("),
+            TokenType::RPAREN => write!(f, ")"),
+            TokenType::LBRACE => write!(f, "{{"),
+            TokenType::RBRACE => write!(f, "}}"),
+            TokenType::FUNCTION => write!(f, "FUNCTION"),
+            TokenType::LET => write!(f, "LET"),
+            TokenType::TRUE => write!(f, "TRUE"),
+            TokenType::FALSE => write!(f, "FALSE"),
+            TokenType::IF => write!(f, "IF"),
+            TokenType::ELSE => write!(f, "ELSE"),
+            TokenType::RETURN => write!(f, "RETURN"),
+        };
+    }
+
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Token {
     pub kind: TokenType,
@@ -61,36 +100,6 @@ impl Token {
     }
 
     pub fn to_string(&self) -> String {
-        return match &self.kind {
-            TokenType::ILLEGAL(illegal) => "ILLEGAL: (".to_string() + illegal.to_string().as_str() + ")",
-            TokenType::EOF => "EOF".to_string(),
-            TokenType::IDENT(ident) => ident.to_string(),
-            TokenType::INT(int) => int.to_string(),
-            TokenType::ASSIGN => "=".to_string(),
-            TokenType::PLUS => "+".to_string(),
-            TokenType::MINUS => "-".to_string(),
-            TokenType::BANG => "!".to_string(),
-            TokenType::ASTERISK => "*".to_string(),
-            TokenType::SLASH => "/".to_string(),
-            TokenType::LT => "<".to_string(),
-            TokenType::GT => ">".to_string(),
-            TokenType::LTE => "<=".to_string(),
-            TokenType::GTE => ">=".to_string(),
-            TokenType::EQ => "==".to_string(),
-            TokenType::NOT_EQ => "!=".to_string(),
-            TokenType::COMMA => ",".to_string(),
-            TokenType::SEMICOLON => ";".to_string(),
-            TokenType::LPAREN => "(".to_string(),
-            TokenType::RPAREN => ")".to_string(),
-            TokenType::LBRACE => "{".to_string(),
-            TokenType::RBRACE => "}".to_string(),
-            TokenType::FUNCTION => "FUNCTION".to_string(),
-            TokenType::LET => "LET".to_string(),
-            TokenType::TRUE => "TRUE".to_string(),
-            TokenType::FALSE => "FALSE".to_string(),
-            TokenType::IF => "IF".to_string(),
-            TokenType::ELSE => "ELSE".to_string(),
-            TokenType::RETURN => "RETURN".to_string(),
-        };
+        return format!("{}", self.kind);
     }
 }
