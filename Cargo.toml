@@ -2,4 +2,7 @@
 members= [
     "main",
     "lexer",
+    "ast",
+    "repl",
+    "parser",
 ]

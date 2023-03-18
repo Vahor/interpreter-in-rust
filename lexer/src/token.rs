@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
 
@@ -44,8 +44,15 @@ pub enum TokenType {
     RETURN,
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct Token {
     pub kind: TokenType,
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        return Self { kind: TokenType::EOF };
+    }
 }
 
 impl Token {
