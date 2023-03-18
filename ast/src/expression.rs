@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
+use crate::statement::BlockStatement;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
-
     StringLiteral(String),
     IntegerLiteral(i64),
     BooleanLiteral(bool),
@@ -23,21 +24,12 @@ pub enum Expression {
     GroupedExpression {
         expression: Box<Expression>,
     },
-}
 
-pub fn prefix_expression(operator: String, right: Expression) -> Expression {
-    return Expression::PrefixExpression {
-        operator,
-        right: Box::new(right),
-    };
-}
-
-pub fn infix_expression(left: Expression, operator: String, right: Expression) -> Expression {
-    return Expression::InfixExpression {
-        left: Box::new(left),
-        operator,
-        right: Box::new(right),
-    };
+    IfExpression {
+        condition: Box<Expression>,
+        consequence: Box<BlockStatement>,
+        alternative: Option<Box<BlockStatement>>,
+    },
 }
 
 impl Display for Expression {
@@ -50,6 +42,25 @@ impl Display for Expression {
             Expression::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
             Expression::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),
             Expression::GroupedExpression { expression } => write!(f, "({})", expression),
+            Expression::IfExpression { condition, consequence, alternative } => {
+                let mut result = String::new();
+                result.push_str("if ");
+                result.push_str(&condition.to_string());
+                result.push_str(" { ");
+                consequence.iter().for_each(|statement| {
+                    result.push_str(&statement.to_string());
+                });
+                result.push_str(" }");
+                if let Some(alternative) = alternative {
+                    result.push_str(" else ");
+                    result.push_str("{ ");
+                    alternative.iter().for_each(|statement| {
+                        result.push_str(&statement.to_string());
+                    });
+                    result.push_str(" }");
+                }
+                return write!(f, "{}", result);
+            }
         };
     }
 }

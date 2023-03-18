@@ -4,7 +4,7 @@ use thiserror::Error;
 use ast::expression::Expression;
 use ast::expression::Expression::{BooleanLiteral, IntegerLiteral};
 use ast::program::Program;
-use ast::statement::{ReturnStatementData, Statement};
+use ast::statement::{BlockStatement, Statement};
 use lexer::lexer::Lexer;
 use lexer::precedence::Precedence;
 use lexer::token::{Token, TokenType};
@@ -22,7 +22,7 @@ pub enum ParserError {
     Expected { expected: String, actual: TokenType },
 
     #[error("Unexpected token {token:?}")]
-    UnexpectedToken { token: TokenType },
+    UnexpectedToken { token: Token },
 
     #[error("Unknown error")]
     Unknown,
@@ -50,53 +50,156 @@ impl Parser {
         }
     }
 
+    fn peek_precedence(&self) -> Precedence {
+        self.peek_token.to_precedence()
+    }
+
     pub fn next_token(&mut self) {
         self.cur_token = self.peek_token.clone();
         self.peek_token = self.lexer.next_token();
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, ParserError> {
+    pub fn parse_program(&mut self) -> Result<Program, Vec<ParserError>> {
         let mut program = Program::default();
+        let mut errors = Vec::new();
         while !matches!(&self.cur_token.kind, TokenType::EOF) {
             let stmt = self.parse_statement();
             if stmt.is_ok() {
                 let stmt = stmt.unwrap();
-                program.statements.push(stmt);
+                if !matches!(stmt, Statement::EmptyStatement) {
+                    program.statements.push(stmt);
+                }
             } else {
                 let err = stmt.err().unwrap_or(ParserError::Unknown);
-                return Err(err);
+                errors.push(err);
             }
             self.next_token();
+        }
+
+        if errors.len() > 0 {
+            return Err(errors);
         }
 
         Ok(program)
     }
 
+
+
+    // Statements
+
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         match &self.cur_token.kind {
             TokenType::LET => self.parse_let_statement(),
             TokenType::RETURN => self.parse_return_statement(),
+            TokenType::SEMICOLON => Ok(Statement::EmptyStatement),
             _ => self.parse_expression_statement(),
         }
     }
 
-    fn parse_expression(&mut self, precedence: &Precedence) -> Option<Expression> {
+    fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
+        if !matches!(&self.peek_token.kind, TokenType::IDENT(_)) {
+            return Err(self.expected_error("IDENT".to_string()));
+        }
+        self.next_token(); // (peek) Skip past the LET
+
+        let identifier = self.parse_indent().unwrap().to_string();
+
+
+        if !matches!(self.peek_token.kind, TokenType::ASSIGN) {
+            return Err(self.expected_error(TokenType::ASSIGN.to_string()));
+        }
+        self.next_token(); // (peek) Skip past the ASSIGN
+        self.next_token(); // (curr) Skip past the ASSIGN
+
+        let value = self.parse_expression(&Precedence::LOWEST);
+        if value.is_err() {
+            return Err(value.err().unwrap());
+        }
+
+        if !matches!(self.peek_token.kind, TokenType::SEMICOLON) {
+            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
+        }
+
+        Ok(Statement::LetStatement {
+            identifier,
+            value: value.unwrap(),
+        })
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
+        self.next_token(); // (peek) Skip past the RETURN
+
+        let value = self.parse_expression(&Precedence::LOWEST);
+
+        if value.is_err() {
+            return Err(value.err().unwrap());
+        }
+
+        if !matches!(self.peek_token.kind, TokenType::SEMICOLON) {
+            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
+        }
+
+        Ok(Statement::ReturnStatement {
+            value: value.unwrap(),
+        })
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
+        let exp = self.parse_expression(&Precedence::LOWEST);
+
+        if exp.is_err() {
+            return Err(exp.err().expect("Should have been checked above"));
+        }
+
+        if matches!(self.cur_token.kind, TokenType::SEMICOLON) {
+            self.next_token(); // (cur_token) Skip past the SEMICOLON
+        }
+
+        Ok(Statement::ExpressionStatement(exp.unwrap()))
+    }
+
+    fn parse_block_statement(&mut self) -> Result<BlockStatement, ParserError> {
+        let mut statements: BlockStatement = vec![];
+
+        if matches!(self.cur_token.kind, TokenType::LBRACE) {
+            self.next_token(); // (cur_token) Skip past the LBRACE
+        }
+
+        while !matches!(self.cur_token.kind, TokenType::RBRACE | TokenType::EOF) {
+            let statement = self.parse_statement();
+
+            if statement.is_err() {
+                return Err(statement.err().unwrap());
+            }
+
+            statements.push(statement.unwrap());
+            self.next_token();
+        }
+        Ok(statements)
+    }
+
+    // Expressions
+
+    fn parse_expression(&mut self, precedence: &Precedence) -> Result<Expression, ParserError> {
         let left_expression = match &self.cur_token.kind {
-            TokenType::INT(i) => Some(IntegerLiteral(*i)),
-            TokenType::IDENT(ident) => Some(Expression::Identifier(ident.to_string())),
+            TokenType::INT(_) => self.parse_int_literal(),
+            TokenType::IDENT(_) => self.parse_indent(),
             TokenType::BANG | TokenType::PLUS | TokenType::MINUS => self.parse_prefix_expression(),
-            TokenType::TRUE => Some(BooleanLiteral(true)),
-            TokenType::FALSE => Some(BooleanLiteral(false)),
+            TokenType::TRUE | TokenType::FALSE => self.parse_boolean_literal(),
             TokenType::LPAREN => self.parse_grouped_expression(),
-            _ => None
+            TokenType::IF => self.parse_if_expression(),
+            _ => None,
         };
 
         if left_expression.is_none() {
-            return None;
+            return Err(ParserError::UnexpectedToken {
+                token: self.cur_token.clone(),
+            });
         }
 
         let mut left_expression = left_expression.unwrap();
-        while !matches!(&self.peek_token.kind, TokenType::SEMICOLON) && (precedence.get_precedence() < self.peek_token.to_precedence().get_precedence()) {
+
+        while !matches!(&self.peek_token.kind, TokenType::SEMICOLON) && (precedence.value() < self.peek_precedence().value()) {
             // Infix match
             match &self.peek_token.kind {
                 TokenType::PLUS | TokenType::MINUS | TokenType::SLASH | TokenType::ASTERISK | TokenType::EQ | TokenType::NOT_EQ | TokenType::LT | TokenType::GT => {
@@ -112,14 +215,43 @@ impl Parser {
             };
         }
 
-        return Some(left_expression);
+        return Ok(left_expression);
+    }
+
+    fn parse_indent(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        if let TokenType::IDENT(value) = token.kind {
+            return Some(Expression::Identifier(value));
+        }
+
+        None
+    }
+
+    fn parse_int_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        if let TokenType::INT(value) = token.kind {
+            return Some(IntegerLiteral(value));
+        }
+
+        None
+    }
+
+    fn parse_boolean_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        return match token.kind {
+            TokenType::TRUE | TokenType::FALSE => {
+                Some(BooleanLiteral(token.kind == TokenType::TRUE))
+            }
+            _ => None,
+        }
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
-        self.next_token();
+        self.next_token(); // Skip operator
+
         let right = self.parse_expression(&Precedence::PREFIX);
-        if right.is_none() {
+        if right.is_err() {
             return None;
         }
 
@@ -136,7 +268,7 @@ impl Parser {
         self.next_token();
 
         let right = self.parse_expression(&precedence);
-        if right.is_none() {
+        if right.is_err() {
             return Some(left);
         }
 
@@ -147,96 +279,78 @@ impl Parser {
         })
     }
 
+    fn parse_if_expression(&mut self) -> Option<Expression> {
+        if !matches!(&self.peek_token.kind, TokenType::LPAREN) {
+            return None;
+        }
+        self.next_token(); // (peek) Skip past the LPAREN
+
+        self.next_token(); // (curr) Skip past the LPAREN
+        let condition = self.parse_expression(&Precedence::LOWEST);
+        if condition.is_err() {
+            return None;
+        }
+
+
+        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            return None;
+        }
+        self.next_token(); // (peek) Skip past the RPAREN
+
+        if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
+            return None;
+        }
+        self.next_token(); // (peek) Skip past the LBRACE
+
+        let consequence = self.parse_block_statement();
+
+        if consequence.is_err() {
+            return None;
+        }
+
+        let mut alternative = None;
+        if matches!(&self.peek_token.kind, TokenType::ELSE) {
+            self.next_token(); // (peek) Skip past the ELSE
+
+            if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
+                return None;
+            }
+            self.next_token(); // (peek) Skip past the LBRACE
+
+            if let Ok(stmt) = self.parse_block_statement() {
+                alternative = Some(stmt);
+            } else {
+                return None;
+            }
+
+        }
+
+        Some(Expression::IfExpression {
+            condition: Box::new(condition.unwrap()),
+            consequence: Box::new(consequence.unwrap()),
+            alternative: alternative.map(Box::new),
+        })
+    }
+
     fn parse_grouped_expression(&mut self) -> Option<Expression> {
         self.next_token(); // (peek) Skip past the LPAREN
         let expression = self.parse_expression(&Precedence::LOWEST);
-        if expression.is_none() {
+        if !expression.is_ok() {
             return None;
         }
 
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
             return None;
         }
-
         self.next_token(); // (peek) Skip past the RPAREN
-        expression
+
+        expression.ok()
     }
-
-    fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
-        if !matches!(&self.peek_token.kind, TokenType::IDENT(_)) {
-            return Err(self.expected_error("IDENT".to_string()));
-        }
-        self.next_token(); // (peek) Skip past the LET
-
-        let identifier = match &self.cur_token.kind {
-            TokenType::IDENT(ident) => ident,
-            _ => unreachable!("Should have been checked above"),
-        }.to_string();
-
-        self.next_token(); // (peek) Skip past the IDENT
-
-        if !matches!(self.cur_token.kind, TokenType::ASSIGN) {
-            return Err(self.expected_error(TokenType::ASSIGN.to_string()));
-        }
-        self.next_token(); // (peek) Skip past the ASSIGN
-
-        let value = self.parse_expression(&Precedence::LOWEST);
-
-        if value.is_none() {
-            return Err(self.expected_error("Expression".to_string()));
-        }
-        self.next_token(); // (peek) Skip past the value
-
-        if !matches!(self.cur_token.kind, TokenType::SEMICOLON) {
-            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
-        }
-
-        Ok(Statement::LetStatement {
-            identifier,
-            value: value.expect("Should have been checked above"),
-        })
-    }
-
-    fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
-        self.next_token(); // (peek) Skip past the RETURN
-
-        let value = self.parse_expression(&Precedence::LOWEST);
-
-        if value.is_none() {
-            return Err(self.expected_error("Expression".to_string()));
-        }
-        self.next_token(); // (peek) Skip past the value
-
-        if !matches!(self.cur_token.kind, TokenType::SEMICOLON) {
-            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
-        }
-
-        Ok(Statement::ReturnStatement(ReturnStatementData {
-            value: value.expect("Should have been checked above"),
-        }))
-    }
-
-    fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
-        let exp = self.parse_expression(&Precedence::LOWEST);
-
-        if exp.is_none() {
-            return Err(self.expected_error("Expression".to_string()));
-        }
-        self.next_token(); // (peek) Skip past the value
-
-        if matches!(self.peek_token.kind, TokenType::SEMICOLON) {
-            self.next_token(); // (peek) Skip past the semicolon
-        }
-
-        Ok(Statement::ExpressionStatement(exp.expect("Should have been checked above")))
-    }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use ast::expression::Expression::{Identifier, IntegerLiteral, PrefixExpression};
-    use ast::expression::{infix_expression, prefix_expression};
+    use ast::expression::Expression::{Identifier, InfixExpression, IntegerLiteral, PrefixExpression};
     use lexer::lexer::Lexer;
 
     use super::*;
@@ -253,8 +367,8 @@ mod tests {
 
     fn asset_return_statement(statement: &Statement, exp: &Expression) {
         match &statement {
-            Statement::ReturnStatement(data) => {
-                assert_eq!(data.value, *exp);
+            Statement::ReturnStatement { value } => {
+                assert_eq!(value, exp);
             }
             _ => assert!(false, "Expected ReturnStatement, got {:?}", statement),
         }
@@ -288,7 +402,7 @@ mod tests {
         match statement {
             Statement::ExpressionStatement(data) => {
                 match data {
-                    Expression::InfixExpression { operator, left: l, right: r } => {
+                    InfixExpression { operator, left: l, right: r } => {
                         assert_eq!(operator, op);
                         assert_eq!(l.as_ref(), left);
                         assert_eq!(r.as_ref(), right);
@@ -298,6 +412,21 @@ mod tests {
             }
             _ => assert!(false, "Expected ExpressionStatement, got {:?}", statement),
         }
+    }
+
+    fn prefix_expression(operator: String, right: Expression) -> Expression {
+        return PrefixExpression {
+            operator,
+            right: Box::new(right),
+        };
+    }
+
+    fn infix_expression(left: Expression, operator: String, right: Expression) -> Expression {
+        return InfixExpression {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        };
     }
 
 
@@ -319,7 +448,6 @@ mod tests {
         assert!(program.is_ok());
 
         let program = program.unwrap();
-
 
         assert_eq!(program.statements.len(), 2);
 
@@ -377,7 +505,6 @@ mod tests {
         asset_expression_statement(&program.statements[0], &Identifier("foobar".to_string()));
         asset_expression_statement(&program.statements[1], &IntegerLiteral(5));
     }
-
 
     #[test]
     fn test_prefix_expressions() {
@@ -493,7 +620,35 @@ mod tests {
         assert_eq!(&program.statements[25].to_string(), "(2 / (5 + 5));");
         assert_eq!(&program.statements[26].to_string(), "(-(5 + 5));");
         assert_eq!(&program.statements[27].to_string(), "(!(true == true));");
+    }
+
+    #[test]
+    fn test_if_expression() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        // if (x < y) { x }
+        // if (x < 3 * y) { x + 1; } else { y }
+        // if (x < 2 * y) { x + 1; }
+        let input = r#"
+if (x < y) { x }
+if (x < 2 * y) { x + 1; }
+if (x < 3 * y) { x + 1; } else { y }
+        "#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
 
 
+        assert_eq!(program.statements.len(), 3);
+
+        assert_eq!(&program.statements[0].to_string(), "if (x < y) { x; }");
+        assert_eq!(&program.statements[1].to_string(), "if (x < (2 * y)) { (x + 1); }");
+        assert_eq!(&program.statements[2].to_string(), "if (x < (3 * y)) { (x + 1); } else { y; }");
     }
 }

@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug};
 
 pub enum Precedence {
     LOWEST,
@@ -16,7 +16,7 @@ pub enum Precedence {
 }
 
 impl Precedence {
-    pub fn get_precedence(&self) -> u8 {
+    pub fn value(&self) -> u8 {
         return match self {
             Precedence::LOWEST => 1,
             Precedence::EQUALS => 2,
@@ -32,13 +32,13 @@ impl Precedence {
 impl Debug for Precedence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return match self {
-            Precedence::LOWEST => write!(f, "LOWEST ({})", self.get_precedence()),
-            Precedence::EQUALS => write!(f, "EQUALS ({})", self.get_precedence()),
-            Precedence::LESSGREATER => write!(f, "LESSGREATER ({})", self.get_precedence()),
-            Precedence::SUM => write!(f, "SUM ({})", self.get_precedence()),
-            Precedence::PRODUCT => write!(f, "PRODUCT ({})", self.get_precedence()),
-            Precedence::PREFIX => write!(f, "PREFIX ({})", self.get_precedence()),
-            Precedence::CALL => write!(f, "CALL ({})", self.get_precedence()),
+            Precedence::LOWEST => write!(f, "LOWEST ({})", self.value()),
+            Precedence::EQUALS => write!(f, "EQUALS ({})", self.value()),
+            Precedence::LESSGREATER => write!(f, "LESSGREATER ({})", self.value()),
+            Precedence::SUM => write!(f, "SUM ({})", self.value()),
+            Precedence::PRODUCT => write!(f, "PRODUCT ({})", self.value()),
+            Precedence::PREFIX => write!(f, "PREFIX ({})", self.value()),
+            Precedence::CALL => write!(f, "CALL ({})", self.value()),
         };
     }
 }

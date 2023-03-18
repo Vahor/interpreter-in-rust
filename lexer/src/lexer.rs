@@ -11,9 +11,9 @@ pub struct Lexer {
     /// current char under examination
     ch: char,
 
-    // current line
+    /// current line
     line: u32,
-    // current column
+    /// current column
     column: u32,
 }
 
