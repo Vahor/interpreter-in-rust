@@ -2,9 +2,9 @@ use log::{debug, error, warn};
 use thiserror::Error;
 
 use ast::expression::Expression;
-use ast::expression::Expression::{IntegerLiteral};
+use ast::expression::Expression::IntegerLiteral;
 use ast::program::Program;
-use ast::statement::{LetStatementData, Statement};
+use ast::statement::{LetStatementData, ReturnStatementData, Statement};
 use lexer::lexer::Lexer;
 use lexer::token::{Token, TokenType};
 
@@ -69,7 +69,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         match &self.cur_token.kind {
             TokenType::LET => self.parse_let_statement(),
-            // TokenType::RETURN => self.parse_return_statement(),
+            TokenType::RETURN => self.parse_return_statement(),
             // _ => self.parse_expression_statement(),
             _ => Err(ParserError::UnexpectedToken { token: self.cur_token.kind.clone() }),
         }
@@ -123,6 +123,25 @@ impl Parser {
             value: value.expect("Should have been checked above"),
         }))
     }
+
+    fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
+        self.next_token(); // (peek) Skip past the RETURN
+
+        let value = self.parse_expression();
+
+        if value.is_none() {
+            return Err(self.expected_error("Expression".to_string()));
+        }
+        self.next_token(); // (peek) Skip past the value
+
+        if !matches!(self.cur_token.kind, TokenType::SEMICOLON) {
+            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
+        }
+
+        Ok(Statement::ReturnStatement(ReturnStatementData {
+            value: value.expect("Should have been checked above"),
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -146,8 +165,7 @@ mod tests {
     #[test]
     fn test_let_statements_literal() {
         std::env::set_var("RUST_LOG", "trace");
-
-        env_logger::init();
+        env_logger::try_init();
 
         let input = r#"
         let x = 5;
@@ -170,4 +188,40 @@ mod tests {
         asset_let_statement(&program.statements[1], "y", &IntegerLiteral(10));
         asset_let_statement(&program.statements[2], "foobar", &IntegerLiteral(838383));
     }
+
+    fn asset_return_statement(statement: &Statement, exp: &Expression) {
+        match &statement {
+            Statement::ReturnStatement(data) => {
+                assert_eq!(data.value, *exp);
+            }
+            _ => assert!(false, "Expected ReturnStatement, got {:?}", statement),
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        std::env::set_var("RUST_LOG", "trace");
+        env_logger::try_init();
+
+        let input = r#"
+        return 5;
+        return 10;
+        return 993322;
+        "#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 3);
+
+        asset_return_statement(&program.statements[0], &IntegerLiteral(5));
+        asset_return_statement(&program.statements[1], &IntegerLiteral(10));
+        asset_return_statement(&program.statements[2], &IntegerLiteral(993322));
+    }
+
 }
