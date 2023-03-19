@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn inline_addition() {
-        let input = "5 + 6 * 7 - 8 / 9";
+        let input = "5 + 6 * 7 - 8 / 9;";
 
         let expected_tokens = vec![
             Token::with_type(TokenType::INT(5)),

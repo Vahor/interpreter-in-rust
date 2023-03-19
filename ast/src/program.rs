@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
-use crate::statement::Statement;
+use crate::statement::{BlockStatement};
 
 #[derive(Debug)]
 pub struct Program {
-    pub statements: Vec<Statement>,
+    pub statements: BlockStatement,
 }
 
 impl Default for Program {
@@ -26,6 +26,7 @@ impl Display for Program {
 
 #[cfg(test)]
 mod tests {
+    use crate::statement::{Statement};
     use crate::expression::Expression;
 
     use super::*;

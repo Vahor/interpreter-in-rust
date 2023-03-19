@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use ast::expression::Expression;
 use ast::program::Program;
-use ast::statement::Statement;
+use ast::statement::{BlockStatement, Statement};
 use object::object::ObjectType;
 
 #[derive(Error, Debug)]
@@ -24,7 +24,11 @@ fn operator_not_supported(actual: String) -> EvaluatorError {
 }
 
 pub fn eval(program: &Program) -> Result<ObjectType, EvaluatorError> {
-    let result = program.statements
+    return eval_block_statement(&program.statements);
+}
+
+fn eval_block_statement(statements: &BlockStatement) -> Result<ObjectType, EvaluatorError> {
+    let result = statements
         .iter()
         .map(eval_node)
         .collect::<Result<Vec<ObjectType>, EvaluatorError>>();
@@ -51,6 +55,7 @@ fn eval_expression(expr: &Expression) -> Result<ObjectType, EvaluatorError> {
         }
         Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(right)?),
         Expression::InfixExpression { left, operator, right } => eval_infix_expression(operator, &eval_expression(left)?, &eval_expression(right)?),
+        Expression::IfExpression { condition, consequence, alternative } => eval_if_expression(condition, consequence, alternative),
         _ => Err(operator_not_supported(expr.to_string())),
     };
 }
@@ -60,7 +65,6 @@ fn eval_prefix_expression(operator: &str, right: &ObjectType) -> Result<ObjectTy
         "!" => eval_bang_operator_expression(right),
         "-" => eval_minus_prefix_operator_expression(right),
         _ => Err(operator_not_supported(operator.to_string())),
-
     }
 }
 
@@ -71,8 +75,8 @@ fn eval_infix_expression(operator: &str, left: &ObjectType, right: &ObjectType) 
         }
         (ObjectType::Boolean(left_value), ObjectType::Boolean(right_value)) => {
             eval_boolean_infix_expression(operator, left_value, right_value)
-        }        _ => Err(operator_not_supported(operator.to_string())),
-
+        }
+        _ => Err(operator_not_supported(format!("{} {} {}", left, operator, right))),
     }
 }
 
@@ -103,7 +107,7 @@ fn eval_boolean_infix_expression(operator: &str, left: &bool, right: &bool) -> R
 fn eval_bang_operator_expression(right: &ObjectType) -> Result<ObjectType, EvaluatorError> {
     match right {
         ObjectType::Boolean(value) => {
-            if *value {
+            if value == &true {
                 Ok(FALSE)
             } else {
                 Ok(TRUE)
@@ -125,6 +129,26 @@ fn eval_minus_prefix_operator_expression(right: &ObjectType) -> Result<ObjectTyp
     match right {
         ObjectType::Integer(value) => Ok(ObjectType::Integer(-*value)),
         _ => Err(operator_not_supported(right.to_string())),
+    }
+}
+
+fn eval_if_expression(condition: &Expression, consequence: &BlockStatement, alternative: &Option<BlockStatement>) -> Result<ObjectType, EvaluatorError> {
+    if is_truthy(&eval_expression(condition)?) {
+        return eval_block_statement(consequence);
+    }
+
+    if alternative.is_some() {
+        return eval_block_statement(alternative.as_ref().unwrap());
+    }
+
+    Ok(ObjectType::Null)
+}
+
+fn is_truthy(obj: &ObjectType) -> bool {
+    match obj {
+        ObjectType::Boolean(value) => *value,
+        ObjectType::Null => false,
+        _ => true,
     }
 }
 
@@ -214,7 +238,7 @@ mod tests {
             ("1 <= 1", true),
             ("1 >= 1", true),
             ("1 <= 0", false),
-            ("1 >= 0", true)
+            ("1 >= 0", true),
         ];
 
         tests.iter().for_each(|(input, result)| {
@@ -242,6 +266,24 @@ mod tests {
         tests.iter().for_each(|(input, result)| {
             let evaluated = test_eval(input.to_string());
             assert_eq!(evaluated, ObjectType::Boolean(*result));
+        })
+    }
+
+    #[test]
+    fn test_if_else_expressions() {
+        let tests = vec![
+            ("if (true) {10}", ObjectType::Integer(10)),
+            ("if (false) {10}", ObjectType::Null),
+            ("if (1) {10}", ObjectType::Integer(10)),
+            ("if (1 < 2) {10}", ObjectType::Integer(10)),
+            ("if (1 > 2) {10}", ObjectType::Null),
+            ("if (1 > 2) {10} else {20}", ObjectType::Integer(20)),
+            ("if (1 < 2) {10} else {20}", ObjectType::Integer(10)),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, *result);
         })
     }
 }
