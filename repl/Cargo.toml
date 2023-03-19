@@ -11,4 +11,5 @@ anyhow = "1.0.69"
 lexer = { path = "../lexer" }
 parser = { path = "../parser" }
 evaluator = { path = "../evaluator" }
+environment = { path = "../environment" }
 rustyline = { version = "11.0.0" }

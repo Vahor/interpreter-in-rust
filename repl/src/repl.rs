@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::{error, warn};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
+use environment::environment::Environment;
 use evaluator::evaluator::eval;
 
 use lexer::lexer::Lexer;
@@ -11,6 +12,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
     let mut reader = DefaultEditor::new()?;
     let lexer = Lexer::default();
     let mut parser = Parser::new(lexer);
+    let mut environment = Environment::new();
 
     if reader.load_history("history.txt").is_err() {
         println!("No previous history.");
@@ -50,7 +52,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
                 }
 
                 let program = program.unwrap();
-                let evaluated = eval(&program);
+                let evaluated = eval(&program, &mut environment);
                 if evaluated.is_err() {
                     error!("Error: {:?}", evaluated.err().unwrap());
                     continue;

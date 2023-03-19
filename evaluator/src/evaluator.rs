@@ -4,6 +4,7 @@ use thiserror::Error;
 use ast::expression::Expression;
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
+use environment::environment::Environment;
 use object::object::ObjectType;
 
 #[derive(Error, Debug)]
@@ -19,11 +20,16 @@ pub enum EvaluatorError {
         operator: String,
         actual: String,
     },
+
+    #[error("Unknown identifier: {identifier}")]
+    UnknownIdentifier {
+        identifier: String,
+    },
 }
 
 fn operator_not_supported(actual: String) -> EvaluatorError {
     EvaluatorError::OperatorNotSupported {
-        actual: actual.to_string(),
+        actual,
     }
 }
 
@@ -35,8 +41,14 @@ fn type_missmatch(expected: &str, operator: &str, actual: &str) -> EvaluatorErro
     }
 }
 
-pub fn eval(program: &Program) -> Result<ObjectType, EvaluatorError> {
-    let result = eval_block_statement(&program.statements)?;
+fn unknown_identifier(identifier: &str) -> EvaluatorError {
+    EvaluatorError::UnknownIdentifier {
+        identifier: identifier.to_string(),
+    }
+}
+
+pub fn eval(program: &Program, environment: &mut Environment) -> Result<ObjectType, EvaluatorError> {
+    let result = eval_block_statement(environment, &program.statements)?;
 
     if let ObjectType::Return(obj) = result {
         return Ok(*obj);
@@ -45,12 +57,53 @@ pub fn eval(program: &Program) -> Result<ObjectType, EvaluatorError> {
     Ok(result)
 }
 
-fn eval_block_statement(statements: &BlockStatement) -> Result<ObjectType, EvaluatorError> {
+
+fn eval_node(environment: &mut Environment, node: &Statement) -> Result<ObjectType, EvaluatorError> {
+    return match node {
+        Statement::ExpressionStatement(expr) => eval_expression(environment, expr),
+        Statement::ReturnStatement { value } => {
+            let evaluated = eval_expression(environment, value)?;
+            return Ok(ObjectType::Return(Box::new(evaluated)));
+        }
+        Statement::LetStatement { value, identifier } => {
+            let evaluated = eval_expression(environment, value)?;
+            environment.set(identifier, evaluated);
+            return Ok(ObjectType::Null);
+        }
+        _ => Err(operator_not_supported(node.to_string())),
+    };
+}
+
+fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<ObjectType, EvaluatorError> {
+    return match expr {
+        Expression::IntegerLiteral(value) => Ok(ObjectType::Integer(*value)),
+        Expression::BooleanLiteral(value) => {
+            if *value {
+                Ok(ObjectType::Boolean(true))
+            } else {
+                Ok(ObjectType::Boolean(false))
+            }
+        }
+        Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(environment, right)?),
+        Expression::InfixExpression { left, operator, right } => eval_infix_expression(operator, &eval_expression(environment, left)?, &eval_expression(environment, right)?),
+        Expression::IfExpression { condition, consequence, alternative } => eval_if_expression(environment, condition, consequence, alternative),
+        Expression::Identifier(identifier) =>{
+            let value = environment.get(identifier);
+            if let Some(value) = value {
+                return Ok(value.clone()); // TODO: clone?
+            }
+            Err(unknown_identifier(identifier))
+        }
+        _ => Err(operator_not_supported(expr.to_string())),
+    };
+}
+
+fn eval_block_statement(environment: &mut Environment, statements: &BlockStatement) -> Result<ObjectType, EvaluatorError> {
     let iter = statements.iter();
     let mut result = ObjectType::Null;
 
     for statement in iter {
-        let evaluated = eval_node(statement);
+        let evaluated = eval_node(environment, statement);
         if let Err(error) = evaluated {
             return Err(error);
         }
@@ -63,34 +116,6 @@ fn eval_block_statement(statements: &BlockStatement) -> Result<ObjectType, Evalu
     }
 
     return Ok(result);
-}
-
-fn eval_node(node: &Statement) -> Result<ObjectType, EvaluatorError> {
-    return match node {
-        Statement::ExpressionStatement(expr) => eval_expression(expr),
-        Statement::ReturnStatement { value } => {
-            let evaluated = eval_expression(value)?;
-            return Ok(ObjectType::Return(Box::new(evaluated)));
-        }
-        _ => Err(operator_not_supported(node.to_string())),
-    };
-}
-
-fn eval_expression(expr: &Expression) -> Result<ObjectType, EvaluatorError> {
-    return match expr {
-        Expression::IntegerLiteral(value) => Ok(ObjectType::Integer(*value)),
-        Expression::BooleanLiteral(value) => {
-            if *value {
-                Ok(ObjectType::Boolean(true))
-            } else {
-                Ok(ObjectType::Boolean(false))
-            }
-        }
-        Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(right)?),
-        Expression::InfixExpression { left, operator, right } => eval_infix_expression(operator, &eval_expression(left)?, &eval_expression(right)?),
-        Expression::IfExpression { condition, consequence, alternative } => eval_if_expression(condition, consequence, alternative),
-        _ => Err(operator_not_supported(expr.to_string())),
-    };
 }
 
 fn eval_prefix_expression(operator: &str, right: &ObjectType) -> Result<ObjectType, EvaluatorError> {
@@ -165,13 +190,13 @@ fn eval_minus_prefix_operator_expression(right: &ObjectType) -> Result<ObjectTyp
     }
 }
 
-fn eval_if_expression(condition: &Expression, consequence: &BlockStatement, alternative: &Option<BlockStatement>) -> Result<ObjectType, EvaluatorError> {
-    if is_truthy(&eval_expression(condition)?) {
-        return eval_block_statement(consequence);
+fn eval_if_expression(environment: &mut Environment, condition: &Expression, consequence: &BlockStatement, alternative: &Option<BlockStatement>) -> Result<ObjectType, EvaluatorError> {
+    if is_truthy(&eval_expression(environment, condition)?) {
+        return eval_block_statement(environment, consequence);
     }
 
     if alternative.is_some() {
-        return eval_block_statement(alternative.as_ref().unwrap());
+        return eval_block_statement(environment, alternative.as_ref().unwrap());
     }
 
     Ok(ObjectType::Null)
@@ -195,6 +220,7 @@ mod tests {
     fn test_eval(input: String) -> ObjectType {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
+        let mut env = Environment::new();
 
         let program = parser.parse_program();
 
@@ -204,7 +230,7 @@ mod tests {
 
         let program = program.unwrap();
 
-        let evaluated = eval(&program);
+        let evaluated = eval(&program, &mut env);
         if evaluated.is_err() {
             panic!("Error: {:?}", evaluated.err().unwrap());
         }
@@ -322,15 +348,30 @@ mod tests {
 
     #[test]
     fn test_return_statements() {
-        std::env::set_var("RUST_LOG", "trace");
-        let _ = env_logger::try_init();
-
         let tests = vec![
             ("return 10;", ObjectType::Integer(10)),
             ("return 10; 9;", ObjectType::Integer(10)),
             ("return 2 * 5; 9;", ObjectType::Integer(10)),
             ("9; return 2 * 5; 9;", ObjectType::Integer(10)),
             ("if (10 > 1) { if (10 > 1) { return 10; } return 1; }", ObjectType::Integer(10)),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, *result);
+        })
+    }
+
+    #[test]
+    fn test_let_statements() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            ("let a = 5; a;", ObjectType::Integer(5)),
+            ("let a = 5 * 5; a;", ObjectType::Integer(25)),
+            ("let a = 5; let b = a; b;", ObjectType::Integer(5)),
+            ("let a = 5; let b = a; let c = a + b + 5; c;", ObjectType::Integer(15)),
         ];
 
         tests.iter().for_each(|(input, result)| {
