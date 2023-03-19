@@ -51,6 +51,12 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
 
                 let program = program.unwrap();
                 let evaluated = eval(&program);
+                if evaluated.is_err() {
+                    error!("Error: {:?}", evaluated.err().unwrap());
+                    continue;
+                }
+
+                let evaluated = evaluated.unwrap();
                 println!("{}", evaluated);
             }
             Err(ReadlineError::Interrupted) => {

@@ -214,7 +214,7 @@ impl Parser {
         while !matches!(&self.peek_token.kind, TokenType::SEMICOLON) && (precedence.value() < self.peek_precedence().value()) {
             // Infix match
             match &self.peek_token.kind {
-                TokenType::PLUS | TokenType::MINUS | TokenType::SLASH | TokenType::ASTERISK | TokenType::EQ | TokenType::NOT_EQ | TokenType::LT | TokenType::GT => {
+                TokenType::PLUS | TokenType::MINUS | TokenType::SLASH | TokenType::ASTERISK | TokenType::EQ | TokenType::NOT_EQ | TokenType::LT | TokenType::GT | TokenType::LTE | TokenType::GTE => {
                     self.next_token();
                     let right_expression = self.parse_infix_expression(left_expression.clone());
                     if right_expression.is_none() {
