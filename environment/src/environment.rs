@@ -15,7 +15,7 @@ impl Environment {
         };
     }
 
-    pub fn new_enclosed<'a>(outer: &'a Environment) -> Environment {
+    pub fn new_enclosed(outer: &Environment) -> Environment {
         return Environment {
             store: HashMap::new(),
             outer: Some(Box::new(outer.clone())), // TODO: sad clone
@@ -35,5 +35,15 @@ impl Environment {
 
     pub fn set(&mut self, name: &str, value: ObjectType) {
         self.store.insert(name.to_string(), value.clone());
+    }
+
+    pub fn merge(&mut self, other: &Environment) {
+        for (key, value) in &other.store {
+            self.store.insert(key.to_string(), value.clone());
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.store.clear();
     }
 }

@@ -1,5 +1,5 @@
 let counter = fn(x) {
-    if (x > 100) {
+    if (x > 400) {
         return true;
     } else {
         let foobar = 9999;

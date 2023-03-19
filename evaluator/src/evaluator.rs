@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{debug, info, warn};
 use thiserror::Error;
 
 use ast::expression::Expression;
@@ -90,14 +90,14 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
         Expression::Identifier(identifier) => {
             let value = environment.get(identifier);
             if let Some(value) = value {
-                return Ok(value.clone()); // TODO: clone?
+                return Ok(value.clone()); // TODO: remove clone
             }
             Err(unknown_identifier(identifier))
         },
         Expression::FunctionLiteral { parameters, body } => Ok(ObjectType::Function {
-            parameters: parameters.clone(), // TODO: clone?
-            body: body.clone(), // TODO: clone?
-            environment: environment.clone(), // TODO: clone?
+            parameters: parameters.clone(), // TODO: remove clone
+            body: body.clone(), // TODO: remove clone
+            environment: environment.clone(), // TODO: remove clone
         }),
         Expression::CallExpression { function, arguments } => {
             let evaluated = eval_expression(environment, function)?;
@@ -110,7 +110,7 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
                 evaluated_arguments.push(eval_expression(environment, argument)?);
             }
 
-            return apply_function(&evaluated, &evaluated_arguments);
+            return apply_function(environment, &evaluated, &evaluated_arguments);
         }
         _ => Err(operator_not_supported(expr.to_string())),
     };
@@ -228,12 +228,12 @@ fn is_truthy(obj: &ObjectType) -> bool {
     }
 }
 
-fn apply_function(function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
-
+fn apply_function(outer_environment: &Environment, function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
     if let ObjectType::Function {parameters, body, environment} = function {
-        let mut enclosing_environment = Environment::new_enclosed(environment);
+        let mut enclosing_environment = Environment::new_enclosed(outer_environment);
+        enclosing_environment.merge(environment); // TODO: this is a hack, we should not clone but use references !!!
         for (value, name) in parameters.iter().zip(args.iter()) {
-            enclosing_environment.set(value.to_string().as_str(), name.clone()); // TODO: clone?
+            enclosing_environment.set(value.to_string().as_str(), name.clone()); // TODO: remove clone
         }
 
         return eval_block_statement(&mut enclosing_environment, body);
