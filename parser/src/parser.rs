@@ -97,7 +97,6 @@ impl Parser {
     }
 
 
-
     // Statements
 
     fn parse_statement(&mut self) -> Result<Statement, ParserError> {
@@ -267,7 +266,7 @@ impl Parser {
                 Some(BooleanLiteral(token.kind == TokenType::TRUE))
             }
             _ => None,
-        }
+        };
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
@@ -346,7 +345,6 @@ impl Parser {
             } else {
                 return None;
             }
-
         }
 
         Some(Expression::IfExpression {

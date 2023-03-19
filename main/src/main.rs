@@ -1,6 +1,6 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
-use anyhow::Result;
 
 #[derive(Parser, Debug)]
 #[command(name = "Interpreter")]
@@ -21,8 +21,7 @@ struct Args {
 }
 
 #[derive(Subcommand, Debug)]
-enum Commands {
-}
+enum Commands {}
 
 fn main() -> Result<(), anyhow::Error> {
     // set RUST_LOG=debug to see debug logs
@@ -56,7 +55,7 @@ fn main() -> Result<(), anyhow::Error> {
                 } else {
                     error!("File {} not found", file);
                     Ok(())
-                }
+                };
             }
 
             warn!("No input provided, starting REPL");

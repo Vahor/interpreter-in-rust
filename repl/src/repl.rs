@@ -2,9 +2,9 @@ use anyhow::Result;
 use log::{error, warn};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
+
 use environment::environment::Environment;
 use evaluator::evaluator::eval;
-
 use lexer::lexer::Lexer;
 use parser::parser::{Parser, ParserError};
 

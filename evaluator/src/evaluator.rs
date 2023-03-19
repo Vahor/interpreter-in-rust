@@ -93,7 +93,7 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
                 return Ok(value.clone()); // TODO: remove clone
             }
             Err(unknown_identifier(identifier))
-        },
+        }
         Expression::FunctionLiteral { parameters, body } => Ok(ObjectType::Function {
             parameters: parameters.clone(), // TODO: remove clone
             body: body.clone(), // TODO: remove clone
@@ -229,7 +229,7 @@ fn is_truthy(obj: &ObjectType) -> bool {
 }
 
 fn apply_function(outer_environment: &Environment, function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
-    if let ObjectType::Function {parameters, body, environment} = function {
+    if let ObjectType::Function { parameters, body, environment } = function {
         let mut enclosing_environment = Environment::new_enclosed(outer_environment);
         enclosing_environment.merge(environment); // TODO: this is a hack, we should not clone but use references !!!
         for (value, name) in parameters.iter().zip(args.iter()) {

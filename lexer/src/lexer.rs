@@ -65,7 +65,6 @@ impl Lexer {
             self.ch = '\0';
         } else {
             self.ch = self.input.chars().nth(self.read_position).unwrap();
-
         }
 
         self.position = self.read_position;

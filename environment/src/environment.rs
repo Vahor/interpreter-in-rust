@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use crate::object::ObjectType;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -41,9 +42,5 @@ impl Environment {
         for (key, value) in &other.store {
             self.store.insert(key.to_string(), value.clone());
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.store.clear();
     }
 }

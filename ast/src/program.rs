@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::statement::{BlockStatement};
+use crate::statement::BlockStatement;
 
 #[derive(Debug)]
 pub struct Program {
@@ -26,8 +26,8 @@ impl Display for Program {
 
 #[cfg(test)]
 mod tests {
-    use crate::statement::{Statement};
     use crate::expression::Expression;
+    use crate::statement::Statement;
 
     use super::*;
 
@@ -35,7 +35,7 @@ mod tests {
     fn test_string() {
         let program = Program {
             statements: vec![
-                Statement::LetStatement{
+                Statement::LetStatement {
                     identifier: "myVar".to_string(),
                     value: Expression::IntegerLiteral(5),
                 },

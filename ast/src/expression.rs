@@ -71,23 +71,23 @@ impl Display for Expression {
                     result.push_str(" }");
                 }
                 return write!(f, "{}", result);
-            },
+            }
             Expression::FunctionLiteral { parameters, body } => {
                 let mut result = String::new();
                 result.push_str("fn(");
-                result.push_str(parameters.iter().map(|v| {v.to_string()}).collect::<Vec<_>>().join(", ").as_str());
+                result.push_str(parameters.iter().map(|v| { v.to_string() }).collect::<Vec<_>>().join(", ").as_str());
                 result.push_str(") { ");
                 body.iter().for_each(|statement| {
                     result.push_str(&statement.to_string());
                 });
                 result.push_str(" }");
                 return write!(f, "{}", result);
-            },
+            }
             Expression::CallExpression { function, arguments } => {
                 let mut result = String::new();
                 result.push_str(&function.to_string());
                 result.push_str("(");
-                result.push_str(arguments.iter().map(|v| {v.to_string()}).collect::<Vec<_>>().join(", ").as_str());
+                result.push_str(arguments.iter().map(|v| { v.to_string() }).collect::<Vec<_>>().join(", ").as_str());
                 result.push_str(")");
                 return write!(f, "{}", result);
             }

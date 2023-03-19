@@ -1,6 +1,8 @@
-use std::fmt::{Display};
+use std::fmt::Display;
+
 use ast::expression::Expression;
-use ast::statement::{BlockStatement};
+use ast::statement::BlockStatement;
+
 use crate::environment::Environment;
 
 pub trait Object {

@@ -1,11 +1,12 @@
-use log::error;
+use log::{debug, error};
+
 use environment::environment::Environment;
 use evaluator::evaluator::eval;
 use lexer::lexer::Lexer;
 use parser::parser::{Parser, ParserError};
 
 pub fn execute_program(input: String) -> Result<(), anyhow::Error> {
-    println!("Executing program: {}", input);
+    debug!("Executing program: {}", input);
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
     let mut environment = Environment::new();

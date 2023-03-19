@@ -1,4 +1,5 @@
 use std::fmt::Display;
+
 use crate::precedence::Precedence;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -101,7 +102,6 @@ impl Into<Precedence> for TokenType {
         };
     }
 }
-
 
 
 #[derive(Clone, PartialEq, Debug)]
