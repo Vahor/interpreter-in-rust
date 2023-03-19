@@ -162,6 +162,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "evaluator"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "env_logger",
+ "lexer",
+ "log",
+ "object",
+ "parser",
+]
+
+[[package]]
 name = "fd-lock"
 version = "3.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -291,6 +303,10 @@ dependencies = [
  "libc",
  "static_assertions",
 ]
+
+[[package]]
+name = "object"
+version = "0.1.0"
 
 [[package]]
 name = "once_cell"

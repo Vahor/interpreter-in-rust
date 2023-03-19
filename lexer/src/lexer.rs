@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use log::debug;
 
 use crate::token::{Token, TokenType};
 
@@ -173,11 +172,6 @@ impl Lexer {
                     self.next_char();
                 }
                 let literal = self.input[start..self.position].to_string();
-
-                debug!("Found number: {}", literal);
-                debug!("Position: {}", self.position);
-                debug!("Read position: {}", self.read_position);
-                debug!("Ch: {}", self.ch);
 
                 Token::new(TokenType::INT(literal.parse::<i64>().unwrap()), self.line, self.column)
             }
