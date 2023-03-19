@@ -10,4 +10,5 @@ log = "0.4.17"
 anyhow = "1.0.69"
 lexer = { path = "../lexer" }
 parser = { path = "../parser" }
+evaluator = { path = "../evaluator" }
 rustyline = { version = "11.0.0" }

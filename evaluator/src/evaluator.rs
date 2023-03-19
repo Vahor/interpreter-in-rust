@@ -1,15 +1,14 @@
 use ast::program::Program;
-use lexer::lexer::Lexer;
 use object::object::ObjectType;
-use log::debug;
 use ast::expression::Expression;
 use ast::statement::Statement;
+
+static TRUE: ObjectType = ObjectType::Boolean(true);
+static FALSE: ObjectType = ObjectType::Boolean(false);
 
 pub fn eval(program: &Program) -> ObjectType {
     let mut result = ObjectType::Null;
     program.statements.iter().for_each(|statement| {
-        debug!("Statement: {}", statement);
-
         result = eval_node(statement);
     });
 
@@ -26,7 +25,13 @@ fn eval_node(node: &Statement) -> ObjectType {
 fn eval_expression(expr: &Expression) -> ObjectType {
     return match expr {
         Expression::IntegerLiteral(value) => ObjectType::Integer(*value),
-        Expression::BooleanLiteral(value) => ObjectType::Boolean(*value),
+        Expression::BooleanLiteral(value) => {
+            if *value {
+                TRUE
+            } else {
+                FALSE
+            }
+        }
         _ => ObjectType::Null,
     }
 }
@@ -34,6 +39,7 @@ fn eval_expression(expr: &Expression) -> ObjectType {
 #[cfg(test)]
 mod tests {
     use parser::parser::Parser;
+    use lexer::lexer::Lexer;
 
     use super::*;
 
@@ -71,6 +77,24 @@ mod tests {
         tests.iter().for_each(|(input, result)| {
             let evaluated = test_eval(input.to_string());
             assert_eq!(evaluated, ObjectType::Integer(*result));
+        })
+    }
+
+    #[test]
+    fn test_boolean_literal() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            ("true", true),
+            ("false", false),
+            ("true;", true),
+            ("false;", false),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, ObjectType::Boolean(*result));
         })
     }
 }

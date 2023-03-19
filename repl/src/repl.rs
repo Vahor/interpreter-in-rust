@@ -2,6 +2,7 @@ use anyhow::Result;
 use log::{error, warn};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
+use evaluator::evaluator::eval;
 
 use lexer::lexer::Lexer;
 use parser::parser::{Parser, ParserError};
@@ -49,9 +50,8 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
                 }
 
                 let program = program.unwrap();
-                for statement in program.statements {
-                    warn!("Statement: {}", statement);
-                }
+                let evaluated = eval(&program);
+                println!("{}", evaluated);
             }
             Err(ReadlineError::Interrupted) => {
                 warn!("CTRL-C");
