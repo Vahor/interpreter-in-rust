@@ -4,12 +4,13 @@ pub trait Object {
     fn inspect(&self) -> String;
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ObjectType {
     Null,
 
     Integer(i64),
     Boolean(bool),
+    Return(Box<ObjectType>),
 }
 
 
@@ -19,6 +20,7 @@ impl Object for ObjectType {
             ObjectType::Null => "null".to_string(),
             ObjectType::Integer(i) => format!("{}", i),
             ObjectType::Boolean(b) => format!("{}", b),
+            ObjectType::Return(obj) => obj.inspect(),
         }
     }
 }

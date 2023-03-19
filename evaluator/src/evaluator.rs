@@ -1,3 +1,4 @@
+use log::{debug, warn};
 use thiserror::Error;
 
 use ast::expression::Expression;
@@ -11,11 +12,14 @@ pub enum EvaluatorError {
     OperatorNotSupported {
         actual: String,
     },
-}
 
-static TRUE: ObjectType = ObjectType::Boolean(true);
-static FALSE: ObjectType = ObjectType::Boolean(false);
-static NULL: ObjectType = ObjectType::Null;
+    #[error("Type mismatch: {expected} {operator} {actual}")]
+    TypeMismatch {
+        expected: String,
+        operator: String,
+        actual: String,
+    },
+}
 
 fn operator_not_supported(actual: String) -> EvaluatorError {
     EvaluatorError::OperatorNotSupported {
@@ -23,22 +27,51 @@ fn operator_not_supported(actual: String) -> EvaluatorError {
     }
 }
 
+fn type_missmatch(expected: &str, operator: &str, actual: &str) -> EvaluatorError {
+    EvaluatorError::TypeMismatch {
+        expected: expected.to_string(),
+        operator: operator.to_string(),
+        actual: actual.to_string(),
+    }
+}
+
 pub fn eval(program: &Program) -> Result<ObjectType, EvaluatorError> {
-    return eval_block_statement(&program.statements);
+    let result = eval_block_statement(&program.statements)?;
+
+    if let ObjectType::Return(obj) = result {
+        return Ok(*obj);
+    }
+
+    Ok(result)
 }
 
 fn eval_block_statement(statements: &BlockStatement) -> Result<ObjectType, EvaluatorError> {
-    let result = statements
-        .iter()
-        .map(eval_node)
-        .collect::<Result<Vec<ObjectType>, EvaluatorError>>();
+    let iter = statements.iter();
+    let mut result = ObjectType::Null;
 
-    return result.map(|results| results.last().unwrap().clone());
+    for statement in iter {
+        let evaluated = eval_node(statement);
+        if let Err(error) = evaluated {
+            return Err(error);
+        }
+        let evaluated = evaluated.unwrap();
+        result = evaluated;
+
+        if let ObjectType::Return(_) = result {
+            break;
+        }
+    }
+
+    return Ok(result);
 }
 
 fn eval_node(node: &Statement) -> Result<ObjectType, EvaluatorError> {
     return match node {
         Statement::ExpressionStatement(expr) => eval_expression(expr),
+        Statement::ReturnStatement { value } => {
+            let evaluated = eval_expression(value)?;
+            return Ok(ObjectType::Return(Box::new(evaluated)));
+        }
         _ => Err(operator_not_supported(node.to_string())),
     };
 }
@@ -48,9 +81,9 @@ fn eval_expression(expr: &Expression) -> Result<ObjectType, EvaluatorError> {
         Expression::IntegerLiteral(value) => Ok(ObjectType::Integer(*value)),
         Expression::BooleanLiteral(value) => {
             if *value {
-                Ok(TRUE)
+                Ok(ObjectType::Boolean(true))
             } else {
-                Ok(FALSE)
+                Ok(ObjectType::Boolean(false))
             }
         }
         Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(right)?),
@@ -76,7 +109,7 @@ fn eval_infix_expression(operator: &str, left: &ObjectType, right: &ObjectType) 
         (ObjectType::Boolean(left_value), ObjectType::Boolean(right_value)) => {
             eval_boolean_infix_expression(operator, left_value, right_value)
         }
-        _ => Err(operator_not_supported(format!("{} {} {}", left, operator, right))),
+        _ => Err(type_missmatch(left.to_string().as_str(), operator, right.to_string().as_str())),
     }
 }
 
@@ -100,7 +133,7 @@ fn eval_boolean_infix_expression(operator: &str, left: &bool, right: &bool) -> R
     match operator {
         "==" => Ok(ObjectType::Boolean(left == right)),
         "!=" => Ok(ObjectType::Boolean(left != right)),
-        _ => Err(operator_not_supported(operator.to_string())),
+        _ => Err(type_missmatch(left.to_string().as_str(), operator, right.to_string().as_str())),
     }
 }
 
@@ -108,19 +141,19 @@ fn eval_bang_operator_expression(right: &ObjectType) -> Result<ObjectType, Evalu
     match right {
         ObjectType::Boolean(value) => {
             if value == &true {
-                Ok(FALSE)
+                Ok(ObjectType::Boolean(false))
             } else {
-                Ok(TRUE)
+                Ok(ObjectType::Boolean(true))
             }
         }
         ObjectType::Integer(value) => {
             if *value == 0 {
-                Ok(TRUE)
+                Ok(ObjectType::Boolean(true))
             } else {
-                Ok(FALSE)
+                Ok(ObjectType::Boolean(false))
             }
         }
-        ObjectType::Null => Ok(TRUE),
+        ObjectType::Null => Ok(ObjectType::Boolean(true)),
         _ => Err(operator_not_supported(right.to_string())),
     }
 }
@@ -279,6 +312,25 @@ mod tests {
             ("if (1 > 2) {10}", ObjectType::Null),
             ("if (1 > 2) {10} else {20}", ObjectType::Integer(20)),
             ("if (1 < 2) {10} else {20}", ObjectType::Integer(10)),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, *result);
+        })
+    }
+
+    #[test]
+    fn test_return_statements() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            ("return 10;", ObjectType::Integer(10)),
+            ("return 10; 9;", ObjectType::Integer(10)),
+            ("return 2 * 5; 9;", ObjectType::Integer(10)),
+            ("9; return 2 * 5; 9;", ObjectType::Integer(10)),
+            ("if (10 > 1) { if (10 > 1) { return 10; } return 1; }", ObjectType::Integer(10)),
         ];
 
         tests.iter().for_each(|(input, result)| {
