@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use log::debug;
 
 use crate::token::{Token, TokenType};
 
@@ -145,7 +146,7 @@ impl Lexer {
             'a'..='z' | 'A'..='Z' | '_' => {
                 has_read = true;
                 let start = self.position;
-                while matches!(self.ch, 'a'..='z' | 'A'..='Z' | '_') {
+                while matches!(self.ch, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9') {
                     self.next_char();
                 }
                 let literal = self.input[start..self.position].to_string();
@@ -173,6 +174,37 @@ impl Lexer {
                 let literal = self.input[start..self.position].to_string();
 
                 Token::new(TokenType::INT(literal.parse::<i64>().unwrap()), self.line, self.column)
+            }
+            '"' => {
+                let quote = self.ch;
+                debug_assert!(quote == '"');
+                has_read = true;
+                let start = self.position + 1;
+                let mut is_escaped = false;
+                while is_escaped || (self.peek_char() != quote && self.peek_char() != '\0') {
+                    is_escaped = false;
+                    self.next_char();
+                    if self.ch == '\\' { // \
+                        is_escaped = true;
+                    }
+                }
+                self.next_char();
+                let literal = self.input[start..self.position].to_string()
+                    // replace escaped characters
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                    .replace("\\r", "\r")
+                    .replace("\\\\", "\\")
+                    .replace("\\\"", "\"")
+                    .replace("\\'", "'");
+                // if not closed, return illegal token
+                if self.ch != '"' {
+                    // TODO: return error
+                    return Token::new(TokenType::ILLEGAL('"'), self.line, self.column);
+                }
+
+                self.next_char();
+                Token::new(TokenType::STRING(literal), self.line, self.column)
             }
             v => Token::new(TokenType::ILLEGAL(v), self.line, self.column),
         };
@@ -227,8 +259,11 @@ mod tests {
     }
 
     #[test]
-    fn addition() {
-        let input = "
+    fn full_list() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let input = r#"
             let five = 5;
             let ten = 10;
 
@@ -243,20 +278,29 @@ mod tests {
             } else {
                 return false;
             }
-        ";
+
+            10 == 10;
+            10 != 9;
+
+            "foobar"
+            "hello \"world\""
+            "hello \n world"
+            "hello \t\t\t world"
+        "#;
+
         let expected_tokens = vec![
             Token::with_type(TokenType::LET),
             Token::with_type(TokenType::IDENT("five".to_string())),
             Token::with_type(TokenType::ASSIGN),
             Token::with_type(TokenType::INT(5)),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::LET),
             Token::with_type(TokenType::IDENT("ten".to_string())),
             Token::with_type(TokenType::ASSIGN),
             Token::with_type(TokenType::INT(10)),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::LET),
             Token::with_type(TokenType::IDENT("add".to_string())),
             Token::with_type(TokenType::ASSIGN),
@@ -267,15 +311,15 @@ mod tests {
             Token::with_type(TokenType::IDENT("y".to_string())),
             Token::with_type(TokenType::RPAREN),
             Token::with_type(TokenType::LBRACE),
-
+//
             Token::with_type(TokenType::IDENT("x".to_string())),
             Token::with_type(TokenType::PLUS),
             Token::with_type(TokenType::IDENT("y".to_string())),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::RBRACE),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::LET),
             Token::with_type(TokenType::IDENT("result".to_string())),
             Token::with_type(TokenType::ASSIGN),
@@ -286,7 +330,7 @@ mod tests {
             Token::with_type(TokenType::IDENT("ten".to_string())),
             Token::with_type(TokenType::RPAREN),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::IF),
             Token::with_type(TokenType::LPAREN),
             Token::with_type(TokenType::INT(5)),
@@ -294,28 +338,42 @@ mod tests {
             Token::with_type(TokenType::INT(10)),
             Token::with_type(TokenType::RPAREN),
             Token::with_type(TokenType::LBRACE),
-
+//
             Token::with_type(TokenType::RETURN),
             Token::with_type(TokenType::TRUE),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::RBRACE),
             Token::with_type(TokenType::ELSE),
             Token::with_type(TokenType::LBRACE),
-
+//
             Token::with_type(TokenType::RETURN),
             Token::with_type(TokenType::FALSE),
             Token::with_type(TokenType::SEMICOLON),
-
+//
             Token::with_type(TokenType::RBRACE),
-
+//
+            Token::with_type(TokenType::INT(10)),
+            Token::with_type(TokenType::EQ),
+            Token::with_type(TokenType::INT(10)),
+            Token::with_type(TokenType::SEMICOLON),
+//
+            Token::with_type(TokenType::INT(10)),
+            Token::with_type(TokenType::NOT_EQ),
+            Token::with_type(TokenType::INT(9)),
+            Token::with_type(TokenType::SEMICOLON),
+//
+            Token::with_type(TokenType::STRING("foobar".to_string())),
+            Token::with_type(TokenType::STRING("hello \"world\"".to_string())),
+            Token::with_type(TokenType::STRING("hello \n world".to_string())),
+            Token::with_type(TokenType::STRING("hello \t\t\t world".to_string())),
+//
             Token::with_type(TokenType::EOF),
         ];
 
         let mut lexer = Lexer::new(input.to_string());
         for expected_token in expected_tokens {
             let token = lexer.next_token();
-            println!("{:?} {:?}", token.kind, expected_token.kind);
             assert_eq!(token.kind, expected_token.kind);
 
             match token.kind {

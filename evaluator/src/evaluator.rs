@@ -84,6 +84,7 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
                 Ok(ObjectType::Boolean(false))
             }
         }
+        Expression::StringLiteral(value) => Ok(ObjectType::String(value.clone())), // TODO: remove clone
         Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(environment, right)?),
         Expression::InfixExpression { left, operator, right } => eval_infix_expression(operator, &eval_expression(environment, left)?, &eval_expression(environment, right)?),
         Expression::IfExpression { condition, consequence, alternative } => eval_if_expression(environment, condition, consequence, alternative),
@@ -152,6 +153,9 @@ fn eval_infix_expression(operator: &str, left: &ObjectType, right: &ObjectType) 
         (ObjectType::Boolean(left_value), ObjectType::Boolean(right_value)) => {
             eval_boolean_infix_expression(operator, left_value, right_value)
         }
+        (ObjectType::String(left_value), ObjectType::String(right_value)) => {
+            eval_string_infix_expression(operator, left_value, right_value)
+        }
         _ => Err(type_missmatch(left.to_string().as_str(), operator, right.to_string().as_str())),
     }
 }
@@ -176,6 +180,13 @@ fn eval_boolean_infix_expression(operator: &str, left: &bool, right: &bool) -> R
     match operator {
         "==" => Ok(ObjectType::Boolean(left == right)),
         "!=" => Ok(ObjectType::Boolean(left != right)),
+        _ => Err(type_missmatch(left.to_string().as_str(), operator, right.to_string().as_str())),
+    }
+}
+
+fn eval_string_infix_expression(operator: &str, left: &String, right: &String) -> Result<ObjectType, EvaluatorError> {
+    match operator {
+        "+" => Ok(ObjectType::String(format!("{}{}", left, right))),
         _ => Err(type_missmatch(left.to_string().as_str(), operator, right.to_string().as_str())),
     }
 }
@@ -335,6 +346,23 @@ mod tests {
         tests.iter().for_each(|(input, result)| {
             let evaluated = test_eval(input.to_string());
             assert_eq!(evaluated, ObjectType::Boolean(*result));
+        })
+    }
+
+    #[test]
+    fn test_string_literal() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            (r#""Nathan""#, "Nathan"),
+            (r#""Nathan" + " " + "D" + ".""#, "Nathan D."),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            debug!("input: {}", input);
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, ObjectType::String(result.to_string()));
         })
     }
 

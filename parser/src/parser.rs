@@ -2,7 +2,7 @@ use log::{debug, error, warn};
 use thiserror::Error;
 
 use ast::expression::Expression;
-use ast::expression::Expression::{BooleanLiteral, IntegerLiteral};
+use ast::expression::Expression::{BooleanLiteral, IntegerLiteral, StringLiteral};
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
 use lexer::lexer::Lexer;
@@ -198,6 +198,7 @@ impl Parser {
     fn parse_expression(&mut self, precedence: &Precedence) -> Result<Expression, ParserError> {
         let left_expression = match &self.cur_token.kind {
             TokenType::INT(_) => self.parse_int_literal(),
+            TokenType::STRING(_) => self.parse_string_literal(),
             TokenType::IDENT(_) => self.parse_indent(),
             TokenType::BANG | TokenType::PLUS | TokenType::MINUS => self.parse_prefix_expression(),
             TokenType::TRUE | TokenType::FALSE => self.parse_boolean_literal(),
@@ -254,6 +255,15 @@ impl Parser {
         let token = self.cur_token.clone();
         if let TokenType::INT(value) = token.kind {
             return Some(IntegerLiteral(value));
+        }
+
+        None
+    }
+
+    fn parse_string_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        if let TokenType::STRING(value) = token.kind {
+            return Some(StringLiteral(value));
         }
 
         None
@@ -567,8 +577,8 @@ mod tests {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
 
-        // let name = "John";
         let input = r#"
+        let name = "John";
         let age = 30;
         let isMale = true;
         "#;
@@ -581,11 +591,11 @@ mod tests {
 
         let program = program.unwrap();
 
-        assert_eq!(program.statements.len(), 2);
+        assert_eq!(program.statements.len(), 3);
 
-        asset_let_statement(&program.statements[0], "age", &IntegerLiteral(30));
-        asset_let_statement(&program.statements[1], "isMale", &BooleanLiteral(true));
-        // asset_let_statement(&program.statements[2], "name", &Expression::StringLiteral("John".to_string()));
+        asset_let_statement(&program.statements[0], "name", &StringLiteral("John".to_string()));
+        asset_let_statement(&program.statements[1], "age", &IntegerLiteral(30));
+        asset_let_statement(&program.statements[2], "isMale", &BooleanLiteral(true));
     }
 
     #[test]

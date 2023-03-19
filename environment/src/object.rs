@@ -15,6 +15,7 @@ pub enum ObjectType {
 
     Integer(i64),
     Boolean(bool),
+    String(String),
     Return(Box<ObjectType>),
 
     Function {
@@ -31,6 +32,7 @@ impl Object for ObjectType {
             ObjectType::Null => "null".to_string(),
             ObjectType::Integer(i) => format!("{}", i),
             ObjectType::Boolean(b) => format!("{}", b),
+            ObjectType::String(s) => format!("{}", s),
             ObjectType::Return(obj) => obj.inspect(),
             ObjectType::Function { parameters, body, .. } => {
                 let mut out = String::new();

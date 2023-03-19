@@ -11,6 +11,7 @@ pub enum TokenType {
     // Identifiers + literals
     IDENT(String),
     INT(i64),
+    STRING(String),
 
     // Operators
     ASSIGN,
@@ -54,6 +55,7 @@ impl Display for TokenType {
             TokenType::EOF => write!(f, "EOF"),
             TokenType::IDENT(ident) => write!(f, "IDENT: {}", ident),
             TokenType::INT(int) => write!(f, "INT: {}", int),
+            TokenType::STRING(string) => write!(f, "STRING: {}", string),
             TokenType::ASSIGN => write!(f, "="),
             TokenType::PLUS => write!(f, "+"),
             TokenType::MINUS => write!(f, "-"),

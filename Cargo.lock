@@ -264,6 +264,7 @@ name = "lexer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "env_logger",
  "log",
 ]
 
