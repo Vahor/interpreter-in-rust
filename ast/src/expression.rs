@@ -27,8 +27,14 @@ pub enum Expression {
 
     IfExpression {
         condition: Box<Expression>,
-        consequence: Box<BlockStatement>,
-        alternative: Option<Box<BlockStatement>>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    },
+
+    FunctionLiteral {
+        /// Identifiers
+        parameters: Vec<Expression>,
+        body: BlockStatement,
     },
 }
 
@@ -59,6 +65,26 @@ impl Display for Expression {
                     });
                     result.push_str(" }");
                 }
+                return write!(f, "{}", result);
+            },
+            Expression::FunctionLiteral { parameters, body } => {
+                let mut result = String::new();
+                result.push_str("fn(");
+                parameters.iter().for_each(|parameter| {
+                    result.push_str(&parameter.to_string());
+                    result.push_str(", ");
+                });
+                if parameters.len() > 0 {
+                    // remove the last comma and space
+                    result.pop();
+                    result.pop();
+                }
+
+                result.push_str(") { ");
+                body.iter().for_each(|statement| {
+                    result.push_str(&statement.to_string());
+                });
+                result.push_str(" }");
                 return write!(f, "{}", result);
             }
         };

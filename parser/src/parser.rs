@@ -43,10 +43,16 @@ impl Parser {
         parser
     }
 
-    fn expected_error(&self, expected: String) -> ParserError {
+    fn expected_error_peek(&self, expected: String) -> ParserError {
         ParserError::Expected {
             expected: expected.to_string(),
             actual: self.peek_token.kind.clone(),
+        }
+    }
+    fn expected_error_curr(&self, expected: String) -> ParserError {
+        ParserError::Expected {
+            expected: expected.to_string(),
+            actual: self.cur_token.kind.clone(),
         }
     }
 
@@ -98,7 +104,7 @@ impl Parser {
 
     fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
         if !matches!(&self.peek_token.kind, TokenType::IDENT(_)) {
-            return Err(self.expected_error("IDENT".to_string()));
+            return Err(self.expected_error_peek("IDENT".to_string()));
         }
         self.next_token(); // (peek) Skip past the LET
 
@@ -106,7 +112,7 @@ impl Parser {
 
 
         if !matches!(self.peek_token.kind, TokenType::ASSIGN) {
-            return Err(self.expected_error(TokenType::ASSIGN.to_string()));
+            return Err(self.expected_error_peek(TokenType::ASSIGN.to_string()));
         }
         self.next_token(); // (peek) Skip past the ASSIGN
         self.next_token(); // (curr) Skip past the ASSIGN
@@ -117,7 +123,7 @@ impl Parser {
         }
 
         if !matches!(self.peek_token.kind, TokenType::SEMICOLON) {
-            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
+            return Err(self.expected_error_peek(TokenType::SEMICOLON.to_string()));
         }
 
         Ok(Statement::LetStatement {
@@ -136,7 +142,7 @@ impl Parser {
         }
 
         if !matches!(self.peek_token.kind, TokenType::SEMICOLON) {
-            return Err(self.expected_error(TokenType::SEMICOLON.to_string()));
+            return Err(self.expected_error_peek(TokenType::SEMICOLON.to_string()));
         }
 
         Ok(Statement::ReturnStatement {
@@ -188,6 +194,7 @@ impl Parser {
             TokenType::TRUE | TokenType::FALSE => self.parse_boolean_literal(),
             TokenType::LPAREN => self.parse_grouped_expression(),
             TokenType::IF => self.parse_if_expression(),
+            TokenType::FUNCTION => self.parse_function_literal(),
             _ => None,
         };
 
@@ -327,8 +334,8 @@ impl Parser {
 
         Some(Expression::IfExpression {
             condition: Box::new(condition.unwrap()),
-            consequence: Box::new(consequence.unwrap()),
-            alternative: alternative.map(Box::new),
+            consequence: consequence.unwrap(),
+            alternative,
         })
     }
 
@@ -345,6 +352,69 @@ impl Parser {
         self.next_token(); // (peek) Skip past the RPAREN
 
         expression.ok()
+    }
+
+    fn parse_function_literal(&mut self) -> Option<Expression> {
+        if !matches!(&self.peek_token.kind, TokenType::LPAREN) {
+            return None;
+        }
+        self.next_token(); // (peek) Skip past the LPAREN
+
+        let parameters = self.parse_function_parameters();
+        if parameters.is_err() {
+            return None;
+        }
+        let parameters = parameters.unwrap();
+
+        if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
+            return None;
+        }
+        self.next_token(); // (peek) Skip past the LBRACE
+
+        let body = self.parse_block_statement();
+        if body.is_err() {
+            return None;
+        }
+
+        Some(Expression::FunctionLiteral {
+            parameters,
+            body: body.unwrap(),
+        })
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<Expression>, ParserError> {
+        let mut identifiers = Vec::new();
+
+        // fn ()
+        if matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            self.next_token(); // (peek) Skip past the RPAREN
+            return Ok(identifiers);
+        }
+
+        self.next_token(); // (peek) Skip past the first identifier
+        if let TokenType::IDENT(ident) = &self.cur_token.kind {
+            identifiers.push(Expression::Identifier(ident.clone()));
+        } else {
+            return Err(self.expected_error_curr("identifier".to_string()));
+        }
+
+        while matches!(&self.peek_token.kind, TokenType::COMMA) {
+            self.next_token(); // (peek) Skip past the COMMA
+            self.next_token(); // (peek) Skip past the next identifier
+
+            if let TokenType::IDENT(ident) = &self.cur_token.kind {
+                identifiers.push(Expression::Identifier(ident.clone()));
+            } else {
+                return Err(self.expected_error_curr("identifier".to_string()));
+            }
+        }
+
+        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            return Err(self.expected_error_peek(")".to_string()));
+        }
+        self.next_token(); // (peek) Skip past the RPAREN
+
+        Ok(identifiers)
     }
 }
 
@@ -650,5 +720,32 @@ if (x < 3 * y) { x + 1; } else { y }
         assert_eq!(&program.statements[0].to_string(), "if (x < y) { x; }");
         assert_eq!(&program.statements[1].to_string(), "if (x < (2 * y)) { (x + 1); }");
         assert_eq!(&program.statements[2].to_string(), "if (x < (3 * y)) { (x + 1); } else { y; }");
+    }
+
+    #[test]
+    fn test_function_literal() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        // fn(x, y) { x + y; }
+        let input = r#"
+fn() { x + y; }
+fn(x, y) { x + y; }
+"#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        debug!("{:?}", program);
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 2);
+
+        assert_eq!(&program.statements[0].to_string(), "fn() { (x + y); }");
+        assert_eq!(&program.statements[1].to_string(), "fn(x, y) { (x + y); }");
     }
 }

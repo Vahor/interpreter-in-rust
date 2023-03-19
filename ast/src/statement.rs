@@ -27,8 +27,8 @@ impl Display for Statement {
             Statement::LetStatement { identifier, value } => write!(f, "let {} = {};", identifier, value),
             Statement::ReturnStatement { value } => write!(f, "return {};", value),
             Statement::ExpressionStatement(expr) => {
-                if let Expression::IfExpression{..} = expr {
-                    // If the expression is an if expression, we don't want to add a semicolon
+                if matches!(expr, Expression::IfExpression { .. } | Expression::FunctionLiteral { .. }) {
+                    // If the expression is an if expression or a function, we don't want to add a semicolon
                     write!(f, "{}", expr)
                 } else {
                     write!(f, "{};", expr)

@@ -27,7 +27,6 @@ impl Display for Program {
 #[cfg(test)]
 mod tests {
     use crate::expression::Expression;
-    use crate::statement::{LetStatementData, ReturnStatementData};
 
     use super::*;
 
@@ -35,13 +34,13 @@ mod tests {
     fn test_string() {
         let program = Program {
             statements: vec![
-                Statement::LetStatement(LetStatementData {
+                Statement::LetStatement{
                     identifier: "myVar".to_string(),
                     value: Expression::IntegerLiteral(5),
-                }),
-                Statement::ReturnStatement(ReturnStatementData {
+                },
+                Statement::ReturnStatement {
                     value: Expression::IntegerLiteral(10),
-                }),
+                },
                 Statement::ExpressionStatement(Expression::IntegerLiteral(5)),
             ],
         };
