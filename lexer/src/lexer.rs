@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use log::debug;
 
 use crate::token::{Token, TokenType};
 
@@ -66,11 +67,11 @@ impl Lexer {
         } else {
             self.ch = self.input.chars().nth(self.read_position).unwrap();
 
-            self.position = self.read_position;
-            self.read_position += 1;
-            self.column += 1;
         }
 
+        self.position = self.read_position;
+        self.read_position += 1;
+        self.column += 1;
         return self.ch;
     }
 
@@ -172,6 +173,11 @@ impl Lexer {
                     self.next_char();
                 }
                 let literal = self.input[start..self.position].to_string();
+
+                debug!("Found number: {}", literal);
+                debug!("Position: {}", self.position);
+                debug!("Read position: {}", self.read_position);
+                debug!("Ch: {}", self.ch);
 
                 Token::new(TokenType::INT(literal.parse::<i64>().unwrap()), self.line, self.column)
             }
@@ -339,5 +345,42 @@ mod tests {
         }
 
         assert_eq!(lexer.next_char(), '\0');
+    }
+
+    #[test]
+    fn inline_addition() {
+        let input = "5 + 6 * 7 - 8 / 9";
+
+        let expected_tokens = vec![
+            Token::with_type(TokenType::INT(5)),
+            Token::with_type(TokenType::PLUS),
+            Token::with_type(TokenType::INT(6)),
+            Token::with_type(TokenType::ASTERISK),
+            Token::with_type(TokenType::INT(7)),
+            Token::with_type(TokenType::MINUS),
+            Token::with_type(TokenType::INT(8)),
+            Token::with_type(TokenType::SLASH),
+            Token::with_type(TokenType::INT(9)),
+            Token::with_type(TokenType::SEMICOLON),
+            Token::with_type(TokenType::EOF),
+        ];
+
+        let mut lexer = Lexer::new(input.to_string());
+        for expected_token in expected_tokens {
+            let token = lexer.next_token();
+            println!("{:?} {:?}", token.kind, expected_token.kind);
+            assert_eq!(token.kind, expected_token.kind);
+
+            match token.kind {
+                TokenType::INT(value) => {
+                    if let TokenType::INT(expected_value) = expected_token.kind {
+                        assert_eq!(value, expected_value);
+                    } else {
+                        panic!("Expected INT, got {:?}", expected_token.kind);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 }

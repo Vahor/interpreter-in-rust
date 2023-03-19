@@ -24,7 +24,7 @@ enum Commands {
 
 fn main() -> Result<(), anyhow::Error> {
     // set RUST_LOG=debug to see debug logs
-    std::env::set_var("RUST_LOG", "trace");
+    std::env::set_var("RUST_LOG", "warn");
 
     env_logger::init();
 

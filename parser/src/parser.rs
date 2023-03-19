@@ -18,11 +18,8 @@ pub struct Parser {
 
 #[derive(Error, Debug)]
 pub enum ParserError {
-    #[error("Expected {expected:?}, got {actual:?}")]
-    Expected { expected: String, actual: TokenType },
-
-    #[error("Unexpected token {token:?}")]
-    UnexpectedToken { token: Token },
+    #[error("Expected {expected:?}, got {actual:?} (line {line}, column {column})")]
+    UnexpectedToken { expected: String, actual: TokenType, line: u32, column: u32 },
 
     #[error("Unknown error")]
     Unknown,
@@ -43,16 +40,26 @@ impl Parser {
         parser
     }
 
+    pub fn reset(&mut self, input: String) {
+        self.lexer.reset(input);
+        self.next_token();
+        self.next_token();
+    }
+
     fn expected_error_peek(&self, expected: String) -> ParserError {
-        ParserError::Expected {
+        ParserError::UnexpectedToken {
             expected: expected.to_string(),
             actual: self.peek_token.kind.clone(),
+            line: self.peek_token.line,
+            column: self.peek_token.column,
         }
     }
     fn expected_error_curr(&self, expected: String) -> ParserError {
-        ParserError::Expected {
+        ParserError::UnexpectedToken {
             expected: expected.to_string(),
             actual: self.cur_token.kind.clone(),
+            line: self.cur_token.line,
+            column: self.cur_token.column,
         }
     }
 
@@ -199,9 +206,7 @@ impl Parser {
         };
 
         if left_expression.is_none() {
-            return Err(ParserError::UnexpectedToken {
-                token: self.cur_token.clone(),
-            });
+            return Err(self.expected_error_curr("Expression".to_string()));
         }
 
         let mut left_expression = left_expression.unwrap();
