@@ -1,8 +1,6 @@
 use clap::{Parser, Subcommand};
-use log::{error, info};
+use log::{error, info, warn};
 use anyhow::Result;
-
-use repl::repl;
 
 #[derive(Parser, Debug)]
 #[command(name = "Interpreter")]
@@ -16,6 +14,10 @@ struct Args {
     /// Takes a string as input and executes it
     #[arg(short = 'c', value_name = "INPUT")]
     inline: Option<String>,
+
+    /// Takes a file as input and executes it
+    #[arg(short = 'f', long = "file", value_name = "FILE")]
+    file: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -24,7 +26,7 @@ enum Commands {
 
 fn main() -> Result<(), anyhow::Error> {
     // set RUST_LOG=debug to see debug logs
-    std::env::set_var("RUST_LOG", "warn");
+    std::env::set_var("RUST_LOG", "info");
 
     env_logger::init();
 
@@ -40,9 +42,25 @@ fn main() -> Result<(), anyhow::Error> {
             if args.inline.is_some() {
                 let input = args.inline.unwrap();
                 info!("Executing inline input: {}", input);
-            } else {
-                return repl::start(">> ");
+                repl::interpreter::execute_program(input)?;
+                return Ok(());
             }
+            if args.file.is_some() {
+                let file = args.file.unwrap();
+                info!("Executing file: {}", file);
+
+                let content = std::fs::read_to_string(&file);
+                return if content.is_ok() {
+                    repl::interpreter::execute_program(content.unwrap())?;
+                    Ok(())
+                } else {
+                    error!("File {} not found", file);
+                    Ok(())
+                }
+            }
+
+            warn!("No input provided, starting REPL");
+            repl::repl::start(">> ")?;
         }
     }
 
