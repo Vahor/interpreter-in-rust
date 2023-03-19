@@ -17,7 +17,7 @@ impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
         for stmt in &self.statements {
-            output.push_str(&format!("{}\n", stmt));
+            output.push_str(&format!("{}", stmt));
         }
         return write!(f, "{}", output);
     }
@@ -48,10 +48,7 @@ mod tests {
 
         assert_eq!(
             program.to_string(),
-            "let myVar = 5;
-return 10;
-5;
-"
+            "let myVar = 5;return 10;5;"
         );
     }
 }

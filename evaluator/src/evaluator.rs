@@ -5,7 +5,7 @@ use ast::expression::Expression;
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
 use environment::environment::Environment;
-use object::object::ObjectType;
+use environment::object::ObjectType;
 
 #[derive(Error, Debug)]
 pub enum EvaluatorError {
@@ -87,12 +87,30 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
         Expression::PrefixExpression { operator, right } => eval_prefix_expression(operator, &eval_expression(environment, right)?),
         Expression::InfixExpression { left, operator, right } => eval_infix_expression(operator, &eval_expression(environment, left)?, &eval_expression(environment, right)?),
         Expression::IfExpression { condition, consequence, alternative } => eval_if_expression(environment, condition, consequence, alternative),
-        Expression::Identifier(identifier) =>{
+        Expression::Identifier(identifier) => {
             let value = environment.get(identifier);
             if let Some(value) = value {
                 return Ok(value.clone()); // TODO: clone?
             }
             Err(unknown_identifier(identifier))
+        },
+        Expression::FunctionLiteral { parameters, body } => Ok(ObjectType::Function {
+            parameters: parameters.clone(), // TODO: clone?
+            body: body.clone(), // TODO: clone?
+            environment: environment.clone(), // TODO: clone?
+        }),
+        Expression::CallExpression { function, arguments } => {
+            let evaluated = eval_expression(environment, function)?;
+
+            let mut evaluated_arguments = vec![];
+
+            let arguments = arguments.iter();
+
+            for argument in arguments {
+                evaluated_arguments.push(eval_expression(environment, argument)?);
+            }
+
+            return apply_function(&evaluated, &evaluated_arguments);
         }
         _ => Err(operator_not_supported(expr.to_string())),
     };
@@ -208,6 +226,20 @@ fn is_truthy(obj: &ObjectType) -> bool {
         ObjectType::Null => false,
         _ => true,
     }
+}
+
+fn apply_function(function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
+
+    if let ObjectType::Function {parameters, body, environment} = function {
+        let mut enclosing_environment = Environment::new_enclosed(environment);
+        for (value, name) in parameters.iter().zip(args.iter()) {
+            enclosing_environment.set(value.to_string().as_str(), name.clone()); // TODO: clone?
+        }
+
+        return eval_block_statement(&mut enclosing_environment, body);
+    }
+
+    Err(operator_not_supported("function".to_string()))
 }
 
 #[cfg(test)]
@@ -378,5 +410,60 @@ mod tests {
             let evaluated = test_eval(input.to_string());
             assert_eq!(evaluated, *result);
         })
+    }
+
+    #[test]
+    fn test_function_definition() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let test = "fn(x) { x + 2;};";
+
+        let evaluated = test_eval(test.to_string());
+        if let ObjectType::Function { parameters, body, .. } = evaluated {
+            assert_eq!(parameters.len(), 1);
+            assert_eq!(parameters[0].to_string(), "x");
+            assert_eq!(body[0].to_string(), "(x + 2);");
+        } else {
+            panic!("object is not a function");
+        }
+    }
+
+    #[test]
+    fn test_function_application() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            ("let identity = fn(x) { x; }; identity(5);", ObjectType::Integer(5)),
+            ("let identity = fn(x) { return x; }; identity(5);", ObjectType::Integer(5)),
+            ("let double = fn(x) { x * 2; }; double(5);", ObjectType::Integer(10)),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", ObjectType::Integer(10)),
+            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", ObjectType::Integer(20)),
+            ("fn(x) { x; }(5)", ObjectType::Integer(5)),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            assert_eq!(evaluated, *result);
+        })
+    }
+
+    #[test]
+    fn test_closure() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let input = r#"
+        let newAdder = fn(x) {
+            fn(y) { x + y };
+        };
+
+        let addTwo = newAdder(2);
+        addTwo(2);
+        "#;
+
+        let evaluated = test_eval(input.to_string());
+        assert_eq!(evaluated, ObjectType::Integer(4));
     }
 }

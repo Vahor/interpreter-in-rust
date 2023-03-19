@@ -185,7 +185,10 @@ impl Parser {
                 return Err(statement.err().unwrap());
             }
 
-            statements.push(statement.unwrap());
+            if !matches!(statement.as_ref().unwrap(), Statement::EmptyStatement) {
+                statements.push(statement.unwrap());
+            }
+
             self.next_token();
         }
         Ok(statements)

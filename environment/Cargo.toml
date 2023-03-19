@@ -9,4 +9,4 @@ edition = "2021"
 env_logger = "0.10.0"
 log = "0.4.17"
 thiserror = "1.0"
-object = { path = "../object" }
+ast = { path = "../ast" }

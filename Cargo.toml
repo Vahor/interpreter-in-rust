@@ -5,6 +5,6 @@ members= [
     "ast",
     "repl",
     "parser",
-    "object",
     "evaluator",
+    "environment",
 ]

@@ -134,9 +134,9 @@ dependencies = [
 name = "environment"
 version = "0.1.0"
 dependencies = [
+ "ast",
  "env_logger",
  "log",
- "object",
  "thiserror",
 ]
 
@@ -180,7 +180,6 @@ dependencies = [
  "environment",
  "lexer",
  "log",
- "object",
  "parser",
  "thiserror",
 ]
@@ -315,10 +314,6 @@ dependencies = [
  "libc",
  "static_assertions",
 ]
-
-[[package]]
-name = "object"
-version = "0.1.0"
 
 [[package]]
 name = "once_cell"

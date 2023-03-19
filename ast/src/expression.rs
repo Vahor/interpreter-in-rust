@@ -75,16 +75,7 @@ impl Display for Expression {
             Expression::FunctionLiteral { parameters, body } => {
                 let mut result = String::new();
                 result.push_str("fn(");
-                parameters.iter().for_each(|parameter| {
-                    result.push_str(&parameter.to_string());
-                    result.push_str(", ");
-                });
-                if parameters.len() > 0 {
-                    // remove the last comma and space
-                    result.pop();
-                    result.pop();
-                }
-
+                result.push_str(parameters.iter().map(|v| {v.to_string()}).collect::<Vec<_>>().join(", ").as_str());
                 result.push_str(") { ");
                 body.iter().for_each(|statement| {
                     result.push_str(&statement.to_string());
@@ -96,15 +87,7 @@ impl Display for Expression {
                 let mut result = String::new();
                 result.push_str(&function.to_string());
                 result.push_str("(");
-                arguments.iter().for_each(|argument| {
-                    result.push_str(&argument.to_string());
-                    result.push_str(", ");
-                });
-                if arguments.len() > 0 {
-                    // remove the last comma and space
-                    result.pop();
-                    result.pop();
-                }
+                result.push_str(arguments.iter().map(|v| {v.to_string()}).collect::<Vec<_>>().join(", ").as_str());
                 result.push_str(")");
                 return write!(f, "{}", result);
             }
