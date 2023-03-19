@@ -1,34 +1,17 @@
 use anyhow::Result;
-use log::{error, info, warn};
+use log::{error, warn};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
 use lexer::lexer::Lexer;
-use lexer::token::TokenType;
 use parser::parser::{Parser, ParserError};
 
 pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
     let mut reader = DefaultEditor::new()?;
-    let mut lexer = Lexer::default();
+    let lexer = Lexer::default();
     let mut parser = Parser::new(lexer);
 
-    // let program = parser.parse_program();
-    //
-    // if program.is_err() {
-    //     let errors = program.err().unwrap();
-    //     for error in errors {
-    //         reader.write_fmt(format_args!("{} ", error))?;
-    //     }
-    //     continue;
-    // }
-    //
-    // let program = program.unwrap();
-    // for statement in program.statements {
-    //     reader.write_fmt(format_args!("{} ", statement))?;
-    // }
-
-    #[cfg(feature = "with-file-history")]
-    if rl.load_history("history.txt").is_err() {
+    if reader.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
 
@@ -37,7 +20,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
         let prompt_len = prompt.len() as u32;
         match readline {
             Ok(line) => {
-                reader.add_history_entry(line.as_str());
+                reader.add_history_entry(line.as_str())?;
                 parser.reset(line);
 
                 let program = parser.parse_program();
@@ -86,8 +69,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
     }
 
 
-    #[cfg(feature = "with-file-history")]
-    rl.save_history("history.txt");
+    reader.save_history("history.txt")?;
 
     Ok(())
 }

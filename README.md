@@ -7,8 +7,8 @@ https://interpreterbook.com/
 ## Todo
 
 - [x] lexer
-- [ ] parser
-- [ ] ast
+- [x] parser
+- [x] ast
 - [ ] evaluator
 
 
