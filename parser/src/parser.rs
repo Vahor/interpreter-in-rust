@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use log::debug;
 use ast::expression::Expression;
 use ast::expression::Expression::{BooleanLiteral, IntegerLiteral, StringLiteral};
 use ast::program::Program;
@@ -62,6 +63,7 @@ impl Parser {
 
     pub fn parse_program(&mut self) -> Result<Program, Vec<EvaluatorError>> {
         let stop_first = STOP_AT_FIRST_ERROR.load(Ordering::Relaxed);
+
         let mut program = Program::default();
         let mut errors = Vec::new();
         while !matches!(&self.cur_token.kind, TokenType::EOF) {
@@ -225,12 +227,9 @@ impl Parser {
                 }
                 TokenType::LPAREN => {
                     self.next_token()?;
-                    let right_expression = self.parse_call_expression(left_expression.clone());
-                    if right_expression.is_none() {
-                        break;
-                    }
 
-                    left_expression = right_expression.unwrap();
+                    let right_expression = self.parse_call_expression(left_expression.clone())?;
+                    left_expression = right_expression;
                 }
                 _ => break,
             };
@@ -439,13 +438,13 @@ impl Parser {
         Ok(identifiers)
     }
 
-    fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
+    fn parse_call_expression(&mut self, function: Expression) -> Result<Expression, EvaluatorError> {
         let arguments = self.parse_call_arguments();
         if arguments.is_err() {
-            return None;
+            return Err(arguments.err().unwrap());
         }
 
-        Some(Expression::CallExpression {
+        Ok(Expression::CallExpression {
             function: Box::new(function),
             arguments: arguments.unwrap(),
         })
