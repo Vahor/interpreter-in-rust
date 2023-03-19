@@ -36,6 +36,11 @@ pub enum Expression {
         parameters: Vec<Expression>,
         body: BlockStatement,
     },
+
+    CallExpression {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 impl Display for Expression {
@@ -85,6 +90,22 @@ impl Display for Expression {
                     result.push_str(&statement.to_string());
                 });
                 result.push_str(" }");
+                return write!(f, "{}", result);
+            },
+            Expression::CallExpression { function, arguments } => {
+                let mut result = String::new();
+                result.push_str(&function.to_string());
+                result.push_str("(");
+                arguments.iter().for_each(|argument| {
+                    result.push_str(&argument.to_string());
+                    result.push_str(", ");
+                });
+                if arguments.len() > 0 {
+                    // remove the last comma and space
+                    result.pop();
+                    result.pop();
+                }
+                result.push_str(")");
                 return write!(f, "{}", result);
             }
         };

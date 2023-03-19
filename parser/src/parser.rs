@@ -218,6 +218,15 @@ impl Parser {
 
                     left_expression = right_expression.unwrap();
                 }
+                TokenType::LPAREN => {
+                    self.next_token();
+                    let right_expression = self.parse_call_expression(left_expression.clone());
+                    if right_expression.is_none() {
+                        break;
+                    }
+
+                    left_expression = right_expression.unwrap();
+                }
                 _ => break,
             };
         }
@@ -415,6 +424,53 @@ impl Parser {
         self.next_token(); // (peek) Skip past the RPAREN
 
         Ok(identifiers)
+    }
+
+    fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
+        let arguments = self.parse_call_arguments();
+        if arguments.is_err() {
+            return None;
+        }
+
+        Some(Expression::CallExpression {
+            function: Box::new(function),
+            arguments: arguments.unwrap(),
+        })
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, ParserError> {
+        let mut arguments = Vec::new();
+
+        // fn ()
+        if matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            self.next_token(); // (peek) Skip past the RPAREN
+            return Ok(arguments);
+        }
+
+        self.next_token(); // (peek) Skip past the first argument
+        let argument = self.parse_expression(&Precedence::LOWEST);
+        if argument.is_err() {
+            return Err(self.expected_error_curr("argument".to_string()));
+        }
+        arguments.push(argument.unwrap());
+
+        while matches!(&self.peek_token.kind, TokenType::COMMA) {
+            self.next_token(); // (peek) Skip past the COMMA
+            self.next_token(); // (peek) Skip past the next argument
+
+            let argument = self.parse_expression(&Precedence::LOWEST);
+            if argument.is_err() {
+                return Err(self.expected_error_curr("argument".to_string()));
+            }
+            arguments.push(argument.unwrap());
+        }
+
+        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            return Err(self.expected_error_peek(")".to_string()));
+        }
+        self.next_token(); // (peek) Skip past the RPAREN
+
+        Ok(arguments)
     }
 }
 
@@ -737,8 +793,6 @@ fn(x, y) { x + y; }
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
 
-        debug!("{:?}", program);
-
         assert!(program.is_ok());
 
         let program = program.unwrap();
@@ -747,5 +801,34 @@ fn(x, y) { x + y; }
 
         assert_eq!(&program.statements[0].to_string(), "fn() { (x + y); }");
         assert_eq!(&program.statements[1].to_string(), "fn(x, y) { (x + y); }");
+    }
+
+    #[test]
+    fn test_function_call() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        // add(1, 2 * 3, 4 + 5);
+        let input = r#"
+add(1, 2 * 3, 4 + 5);
+a + add(b * c) + d;
+add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8));
+add(a + b + c * d / f + g);
+"#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 4);
+
+        assert_eq!(&program.statements[0].to_string(), "add(1, (2 * 3), (4 + 5));");
+        assert_eq!(&program.statements[1].to_string(), "((a + add((b * c))) + d);");
+        assert_eq!(&program.statements[2].to_string(), "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));");
+        assert_eq!(&program.statements[3].to_string(), "add((((a + b) + ((c * d) / f)) + g));");
     }
 }
