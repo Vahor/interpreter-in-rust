@@ -136,6 +136,7 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "env_logger",
+ "error",
  "log",
  "thiserror",
 ]
@@ -162,6 +163,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "error"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "error-code"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -178,10 +186,10 @@ dependencies = [
  "ast",
  "env_logger",
  "environment",
+ "error",
  "lexer",
  "log",
  "parser",
- "thiserror",
 ]
 
 [[package]]
@@ -193,6 +201,13 @@ dependencies = [
  "cfg-if",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "flags"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
 ]
 
 [[package]]
@@ -231,6 +246,7 @@ dependencies = [
  "anyhow",
  "clap",
  "env_logger",
+ "flags",
  "lexer",
  "log",
  "repl",
@@ -265,6 +281,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "env_logger",
+ "error",
  "log",
 ]
 
@@ -335,6 +352,8 @@ dependencies = [
  "anyhow",
  "ast",
  "env_logger",
+ "error",
+ "flags",
  "lexer",
  "log",
  "thiserror",
@@ -435,6 +454,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "environment",
+ "error",
  "evaluator",
  "lexer",
  "log",

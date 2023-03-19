@@ -1,28 +1,19 @@
-use log::{debug, error, warn};
-use thiserror::Error;
-
+use std::sync::atomic::Ordering;
 use ast::expression::Expression;
 use ast::expression::Expression::{BooleanLiteral, IntegerLiteral, StringLiteral};
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
+use error::EvaluatorError;
 use lexer::lexer::Lexer;
 use lexer::precedence::Precedence;
 use lexer::token::{Token, TokenType};
+use flags::STOP_AT_FIRST_ERROR;
 
 #[derive(Debug)]
 pub struct Parser {
     pub lexer: Lexer,
     pub cur_token: Token,
     pub peek_token: Token,
-}
-
-#[derive(Error, Debug)]
-pub enum ParserError {
-    #[error("Expected {expected:?}, got {actual:?} (line {line}, column {column})")]
-    UnexpectedToken { expected: String, actual: TokenType, line: u32, column: u32 },
-
-    #[error("Unknown error")]
-    Unknown,
 }
 
 impl Parser {
@@ -34,45 +25,43 @@ impl Parser {
         };
 
         // Read two tokens so cur_token and peek_token are defined
-        parser.next_token();
-        parser.next_token();
+        parser.next_token().expect("Failed to read first token");
+        parser.next_token().expect("Failed to read second token");
 
         parser
     }
 
     pub fn reset(&mut self, input: String) {
         self.lexer.reset(input);
-        self.next_token();
-        self.next_token();
+        self.next_token().expect("Failed to read first token");
+        self.next_token().expect("Failed to read second token");
     }
 
-    fn expected_error_peek(&self, expected: String) -> ParserError {
-        ParserError::UnexpectedToken {
-            expected: expected.to_string(),
-            actual: self.peek_token.kind.clone(),
-            line: self.peek_token.line,
-            column: self.peek_token.column,
-        }
+    fn expected_error_peek(&self, expected: String) -> EvaluatorError {
+        EvaluatorError::expected_token(expected.to_string().as_str(),
+                                       self.peek_token.kind.clone().to_string().as_str(),
+                                       self.peek_token.line,
+                                       self.peek_token.column)
     }
-    fn expected_error_curr(&self, expected: String) -> ParserError {
-        ParserError::UnexpectedToken {
-            expected: expected.to_string(),
-            actual: self.cur_token.kind.clone(),
-            line: self.cur_token.line,
-            column: self.cur_token.column,
-        }
+    fn expected_error_curr(&self, expected: String) -> EvaluatorError {
+        EvaluatorError::expected_token(expected.to_string().as_str(),
+                                       self.cur_token.kind.clone().to_string().as_str(),
+                                       self.cur_token.line,
+                                       self.cur_token.column)
     }
 
     fn peek_precedence(&self) -> Precedence {
         self.peek_token.to_precedence()
     }
 
-    pub fn next_token(&mut self) {
+    pub fn next_token(&mut self) -> Result<(), EvaluatorError> {
         self.cur_token = self.peek_token.clone();
-        self.peek_token = self.lexer.next_token();
+        self.peek_token = self.lexer.next_token()?;
+        Ok(())
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, Vec<ParserError>> {
+    pub fn parse_program(&mut self) -> Result<Program, Vec<EvaluatorError>> {
+        let stop_first = STOP_AT_FIRST_ERROR.load(Ordering::Relaxed);
         let mut program = Program::default();
         let mut errors = Vec::new();
         while !matches!(&self.cur_token.kind, TokenType::EOF) {
@@ -83,10 +72,18 @@ impl Parser {
                     program.statements.push(stmt);
                 }
             } else {
-                let err = stmt.err().unwrap_or(ParserError::Unknown);
+                let err = stmt.err().unwrap_or(EvaluatorError::unknown_error());
+                errors.push(err);
+                if stop_first {
+                    return Err(errors);
+                }
+            }
+
+            let next = self.next_token();
+            if next.is_err() {
+                let err = next.err().unwrap_or(EvaluatorError::unknown_error());
                 errors.push(err);
             }
-            self.next_token();
         }
 
         if errors.len() > 0 {
@@ -99,7 +96,7 @@ impl Parser {
 
     // Statements
 
-    fn parse_statement(&mut self) -> Result<Statement, ParserError> {
+    fn parse_statement(&mut self) -> Result<Statement, EvaluatorError> {
         match &self.cur_token.kind {
             TokenType::LET => self.parse_let_statement(),
             TokenType::RETURN => self.parse_return_statement(),
@@ -108,11 +105,11 @@ impl Parser {
         }
     }
 
-    fn parse_let_statement(&mut self) -> Result<Statement, ParserError> {
+    fn parse_let_statement(&mut self) -> Result<Statement, EvaluatorError> {
         if !matches!(&self.peek_token.kind, TokenType::IDENT(_)) {
             return Err(self.expected_error_peek("IDENT".to_string()));
         }
-        self.next_token(); // (peek) Skip past the LET
+        self.next_token()?; // (peek) Skip past the LET
 
         let identifier = self.parse_indent().unwrap().to_string();
 
@@ -120,8 +117,8 @@ impl Parser {
         if !matches!(self.peek_token.kind, TokenType::ASSIGN) {
             return Err(self.expected_error_peek(TokenType::ASSIGN.to_string()));
         }
-        self.next_token(); // (peek) Skip past the ASSIGN
-        self.next_token(); // (curr) Skip past the ASSIGN
+        self.next_token()?; // (peek) Skip past the ASSIGN
+        self.next_token()?; // (curr) Skip past the ASSIGN
 
         let value = self.parse_expression(&Precedence::LOWEST);
         if value.is_err() {
@@ -138,8 +135,8 @@ impl Parser {
         })
     }
 
-    fn parse_return_statement(&mut self) -> Result<Statement, ParserError> {
-        self.next_token(); // (peek) Skip past the RETURN
+    fn parse_return_statement(&mut self) -> Result<Statement, EvaluatorError> {
+        self.next_token()?; // (peek) Skip past the RETURN
 
         let value = self.parse_expression(&Precedence::LOWEST);
 
@@ -156,7 +153,7 @@ impl Parser {
         })
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Statement, ParserError> {
+    fn parse_expression_statement(&mut self) -> Result<Statement, EvaluatorError> {
         let exp = self.parse_expression(&Precedence::LOWEST);
 
         if exp.is_err() {
@@ -164,17 +161,17 @@ impl Parser {
         }
 
         if matches!(self.cur_token.kind, TokenType::SEMICOLON) {
-            self.next_token(); // (cur_token) Skip past the SEMICOLON
+            self.next_token()?; // (cur_token) Skip past the SEMICOLON
         }
 
         Ok(Statement::ExpressionStatement(exp.unwrap()))
     }
 
-    fn parse_block_statement(&mut self) -> Result<BlockStatement, ParserError> {
+    fn parse_block_statement(&mut self) -> Result<BlockStatement, EvaluatorError> {
         let mut statements: BlockStatement = vec![];
 
         if matches!(self.cur_token.kind, TokenType::LBRACE) {
-            self.next_token(); // (cur_token) Skip past the LBRACE
+            self.next_token()?; // (cur_token) Skip past the LBRACE
         }
 
         while !matches!(self.cur_token.kind, TokenType::RBRACE | TokenType::EOF) {
@@ -188,14 +185,14 @@ impl Parser {
                 statements.push(statement.unwrap());
             }
 
-            self.next_token();
+            self.next_token()?;
         }
         Ok(statements)
     }
 
     // Expressions
 
-    fn parse_expression(&mut self, precedence: &Precedence) -> Result<Expression, ParserError> {
+    fn parse_expression(&mut self, precedence: &Precedence) -> Result<Expression, EvaluatorError> {
         let left_expression = match &self.cur_token.kind {
             TokenType::INT(_) => self.parse_int_literal(),
             TokenType::STRING(_) => self.parse_string_literal(),
@@ -205,11 +202,11 @@ impl Parser {
             TokenType::LPAREN => self.parse_grouped_expression(),
             TokenType::IF => self.parse_if_expression(),
             TokenType::FUNCTION => self.parse_function_literal(),
-            _ => None,
+            _ => Err(self.expected_error_curr("Expression".to_string())),
         };
 
-        if left_expression.is_none() {
-            return Err(self.expected_error_curr("Expression".to_string()));
+        if left_expression.is_err() {
+            return Err(left_expression.err().unwrap());
         }
 
         let mut left_expression = left_expression.unwrap();
@@ -218,16 +215,16 @@ impl Parser {
             // Infix match
             match &self.peek_token.kind {
                 TokenType::PLUS | TokenType::MINUS | TokenType::SLASH | TokenType::ASTERISK | TokenType::EQ | TokenType::NOT_EQ | TokenType::LT | TokenType::GT | TokenType::LTE | TokenType::GTE => {
-                    self.next_token();
+                    self.next_token()?;
                     let right_expression = self.parse_infix_expression(left_expression.clone());
-                    if right_expression.is_none() {
-                        break;
+                    if right_expression.is_err() {
+                        return Err(right_expression.err().unwrap());
                     }
 
                     left_expression = right_expression.unwrap();
                 }
                 TokenType::LPAREN => {
-                    self.next_token();
+                    self.next_token()?;
                     let right_expression = self.parse_call_expression(left_expression.clone());
                     if right_expression.is_none() {
                         break;
@@ -242,181 +239,181 @@ impl Parser {
         return Ok(left_expression);
     }
 
-    fn parse_indent(&mut self) -> Option<Expression> {
+    fn parse_indent(&mut self) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
         if let TokenType::IDENT(value) = token.kind {
-            return Some(Expression::Identifier(value));
+            return Ok(Expression::Identifier(value));
         }
 
-        None
+        Err(self.expected_error_curr("IDENT".to_string()))
     }
 
-    fn parse_int_literal(&mut self) -> Option<Expression> {
+    fn parse_int_literal(&mut self) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
         if let TokenType::INT(value) = token.kind {
-            return Some(IntegerLiteral(value));
+            return Ok(IntegerLiteral(value));
         }
 
-        None
+        Err(self.expected_error_curr("INT".to_string()))
     }
 
-    fn parse_string_literal(&mut self) -> Option<Expression> {
+    fn parse_string_literal(&mut self) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
         if let TokenType::STRING(value) = token.kind {
-            return Some(StringLiteral(value));
+            return Ok(StringLiteral(value));
         }
 
-        None
+        Err(self.expected_error_curr("STRING".to_string()))
     }
 
-    fn parse_boolean_literal(&mut self) -> Option<Expression> {
+    fn parse_boolean_literal(&mut self) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
         return match token.kind {
             TokenType::TRUE | TokenType::FALSE => {
-                Some(BooleanLiteral(token.kind == TokenType::TRUE))
+                Ok(BooleanLiteral(token.kind == TokenType::TRUE))
             }
-            _ => None,
+            _ => Err(self.expected_error_curr("BOOLEAN".to_string())),
         };
     }
 
-    fn parse_prefix_expression(&mut self) -> Option<Expression> {
+    fn parse_prefix_expression(&mut self) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
-        self.next_token(); // Skip operator
+        self.next_token()?; // Skip operator
 
         let right = self.parse_expression(&Precedence::PREFIX);
         if right.is_err() {
-            return None;
+            return Err(right.err().unwrap());
         }
 
-        Some(Expression::PrefixExpression {
+        Ok(Expression::PrefixExpression {
             operator: token.kind.to_string(),
             right: Box::new(right.unwrap()),
         })
     }
 
-    fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
+    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, EvaluatorError> {
         let token = self.cur_token.clone();
 
         let precedence = self.cur_token.to_precedence();
-        self.next_token();
+        self.next_token()?;
 
         let right = self.parse_expression(&precedence);
         if right.is_err() {
-            return Some(left);
+            return Ok(left);
         }
 
-        Some(Expression::InfixExpression {
+        Ok(Expression::InfixExpression {
             operator: token.kind.to_string(),
             left: Box::new(left),
             right: Box::new(right.unwrap()),
         })
     }
 
-    fn parse_if_expression(&mut self) -> Option<Expression> {
+    fn parse_if_expression(&mut self) -> Result<Expression, EvaluatorError> {
         if !matches!(&self.peek_token.kind, TokenType::LPAREN) {
-            return None;
+            return Err(self.expected_error_peek("(".to_string()));
         }
-        self.next_token(); // (peek) Skip past the LPAREN
+        self.next_token()?; // (peek) Skip past the LPAREN
 
-        self.next_token(); // (curr) Skip past the LPAREN
+        self.next_token()?; // (curr) Skip past the LPAREN
         let condition = self.parse_expression(&Precedence::LOWEST);
         if condition.is_err() {
-            return None;
+            return Err(condition.err().unwrap());
         }
 
 
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            return None;
+            return Err(self.expected_error_peek(")".to_string()));
         }
-        self.next_token(); // (peek) Skip past the RPAREN
+        self.next_token()?; // (peek) Skip past the RPAREN
 
         if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
-            return None;
+            return Err(self.expected_error_peek("{".to_string()));
         }
-        self.next_token(); // (peek) Skip past the LBRACE
+        self.next_token()?; // (peek) Skip past the LBRACE
 
         let consequence = self.parse_block_statement();
 
         if consequence.is_err() {
-            return None;
+            return Err(consequence.err().unwrap());
         }
 
         let mut alternative = None;
         if matches!(&self.peek_token.kind, TokenType::ELSE) {
-            self.next_token(); // (peek) Skip past the ELSE
+            self.next_token()?; // (peek) Skip past the ELSE
 
             if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
-                return None;
+                return Err(self.expected_error_peek("{".to_string()));
             }
-            self.next_token(); // (peek) Skip past the LBRACE
+            self.next_token()?; // (peek) Skip past the LBRACE
 
-            if let Ok(stmt) = self.parse_block_statement() {
-                alternative = Some(stmt);
-            } else {
-                return None;
+            let block = self.parse_block_statement();
+            if block.is_err() {
+                return Err(block.err().unwrap());
             }
+            alternative = Some(block.unwrap());
         }
 
-        Some(Expression::IfExpression {
+        Ok(Expression::IfExpression {
             condition: Box::new(condition.unwrap()),
             consequence: consequence.unwrap(),
             alternative,
         })
     }
 
-    fn parse_grouped_expression(&mut self) -> Option<Expression> {
-        self.next_token(); // (peek) Skip past the LPAREN
+    fn parse_grouped_expression(&mut self) -> Result<Expression, EvaluatorError> {
+        self.next_token()?; // (peek) Skip past the LPAREN
         let expression = self.parse_expression(&Precedence::LOWEST);
-        if !expression.is_ok() {
-            return None;
+        if expression.is_err() {
+            return Err(expression.err().unwrap());
         }
 
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            return None;
+            return Err(self.expected_error_peek(")".to_string()));
         }
-        self.next_token(); // (peek) Skip past the RPAREN
+        self.next_token()?; // (peek) Skip past the RPAREN
 
-        expression.ok()
+        Ok(expression.unwrap())
     }
 
-    fn parse_function_literal(&mut self) -> Option<Expression> {
+    fn parse_function_literal(&mut self) -> Result<Expression, EvaluatorError> {
         if !matches!(&self.peek_token.kind, TokenType::LPAREN) {
-            return None;
+            return Err(self.expected_error_peek("(".to_string()));
         }
-        self.next_token(); // (peek) Skip past the LPAREN
+        self.next_token()?; // (peek) Skip past the LPAREN
 
         let parameters = self.parse_function_parameters();
         if parameters.is_err() {
-            return None;
+            return Err(parameters.err().unwrap());
         }
         let parameters = parameters.unwrap();
 
         if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
-            return None;
+            return Err(self.expected_error_peek("{".to_string()));
         }
-        self.next_token(); // (peek) Skip past the LBRACE
+        self.next_token()?; // (peek) Skip past the LBRACE
 
         let body = self.parse_block_statement();
         if body.is_err() {
-            return None;
+            return Err(body.err().unwrap());
         }
 
-        Some(Expression::FunctionLiteral {
+        Ok(Expression::FunctionLiteral {
             parameters,
             body: body.unwrap(),
         })
     }
 
-    fn parse_function_parameters(&mut self) -> Result<Vec<Expression>, ParserError> {
+    fn parse_function_parameters(&mut self) -> Result<Vec<Expression>, EvaluatorError> {
         let mut identifiers = Vec::new();
 
         // fn ()
         if matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            self.next_token(); // (peek) Skip past the RPAREN
+            self.next_token()?; // (peek) Skip past the RPAREN
             return Ok(identifiers);
         }
 
-        self.next_token(); // (peek) Skip past the first identifier
+        self.next_token()?; // (peek) Skip past the first identifier
         if let TokenType::IDENT(ident) = &self.cur_token.kind {
             identifiers.push(Expression::Identifier(ident.clone()));
         } else {
@@ -424,8 +421,8 @@ impl Parser {
         }
 
         while matches!(&self.peek_token.kind, TokenType::COMMA) {
-            self.next_token(); // (peek) Skip past the COMMA
-            self.next_token(); // (peek) Skip past the next identifier
+            self.next_token()?; // (peek) Skip past the COMMA
+            self.next_token()?; // (peek) Skip past the next identifier
 
             if let TokenType::IDENT(ident) = &self.cur_token.kind {
                 identifiers.push(Expression::Identifier(ident.clone()));
@@ -437,7 +434,7 @@ impl Parser {
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
             return Err(self.expected_error_peek(")".to_string()));
         }
-        self.next_token(); // (peek) Skip past the RPAREN
+        self.next_token()?; // (peek) Skip past the RPAREN
 
         Ok(identifiers)
     }
@@ -454,16 +451,16 @@ impl Parser {
         })
     }
 
-    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, ParserError> {
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, EvaluatorError> {
         let mut arguments = Vec::new();
 
         // fn ()
         if matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            self.next_token(); // (peek) Skip past the RPAREN
+            self.next_token()?; // (peek) Skip past the RPAREN
             return Ok(arguments);
         }
 
-        self.next_token(); // (peek) Skip past the first argument
+        self.next_token()?; // (peek) Skip past the first argument
         let argument = self.parse_expression(&Precedence::LOWEST);
         if argument.is_err() {
             return Err(self.expected_error_curr("argument".to_string()));
@@ -471,8 +468,8 @@ impl Parser {
         arguments.push(argument.unwrap());
 
         while matches!(&self.peek_token.kind, TokenType::COMMA) {
-            self.next_token(); // (peek) Skip past the COMMA
-            self.next_token(); // (peek) Skip past the next argument
+            self.next_token()?; // (peek) Skip past the COMMA
+            self.next_token()?; // (peek) Skip past the next argument
 
             let argument = self.parse_expression(&Precedence::LOWEST);
             if argument.is_err() {
@@ -484,7 +481,7 @@ impl Parser {
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
             return Err(self.expected_error_peek(")".to_string()));
         }
-        self.next_token(); // (peek) Skip past the RPAREN
+        self.next_token()?; // (peek) Skip past the RPAREN
 
         Ok(arguments)
     }

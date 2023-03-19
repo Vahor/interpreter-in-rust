@@ -3,7 +3,7 @@ use log::{debug, error};
 use environment::environment::Environment;
 use evaluator::evaluator::eval;
 use lexer::lexer::Lexer;
-use parser::parser::{Parser, ParserError};
+use parser::parser::{Parser};
 
 pub fn execute_program(input: String) -> Result<(), anyhow::Error> {
     debug!("Executing program: {}", input);
@@ -17,9 +17,6 @@ pub fn execute_program(input: String) -> Result<(), anyhow::Error> {
         let errors = program.err().unwrap();
         for error in errors {
             match error {
-                ParserError::UnexpectedToken { expected, actual, line, column } => {
-                    error!("Error: Unexpected token: expected {:?}, got {:?} at line {}, column {}", expected, actual, line, column);
-                }
                 _ => {
                     error!("Error: {:?}", error);
                 }

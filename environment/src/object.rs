@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use ast::expression::Expression;
 use ast::statement::BlockStatement;
+use error::EvaluatorError;
 
 use crate::environment::Environment;
 
@@ -23,6 +24,8 @@ pub enum ObjectType {
         body: BlockStatement,
         environment: Environment,
     },
+
+    Builtin(fn(Vec<ObjectType>) -> Result<ObjectType, EvaluatorError>)
 }
 
 
@@ -45,6 +48,7 @@ impl Object for ObjectType {
                 out.push_str("}");
                 out
             }
+            ObjectType::Builtin(_) => "builtin function".to_string(),
         }
     }
 }

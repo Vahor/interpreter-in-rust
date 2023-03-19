@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 lexer = { path = "../lexer" }
 parser = { path = "../parser" }
+error = { path = "../error" }
 ast = { path = "../ast" }
 environment = { path = "../environment" }
 env_logger = "0.10.0"
 log = "0.4.17"
-thiserror = "1.0"

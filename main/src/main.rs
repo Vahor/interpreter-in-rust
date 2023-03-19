@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
+use flags::STOP_AT_FIRST_ERROR;
 
 #[derive(Parser, Debug)]
 #[command(name = "Interpreter")]
@@ -18,13 +19,17 @@ struct Args {
     /// Takes a file as input and executes it
     #[arg(short = 'f', long = "file", value_name = "FILE")]
     file: Option<String>,
+
+    /// (Optional) Stops the program after the first error
+    /// (default: false)
+    #[arg(short = 's', long = "stop-on-error")]
+    stop_on_error: bool,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {}
 
 fn main() -> Result<(), anyhow::Error> {
-    // set RUST_LOG=debug to see debug logs
     std::env::set_var("RUST_LOG", "info");
 
     env_logger::init();
@@ -38,6 +43,10 @@ fn main() -> Result<(), anyhow::Error> {
             }
         },
         None => {
+            if args.stop_on_error {
+                STOP_AT_FIRST_ERROR.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+
             if args.inline.is_some() {
                 let input = args.inline.unwrap();
                 info!("Executing inline input: {}", input);

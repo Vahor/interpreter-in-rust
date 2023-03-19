@@ -12,4 +12,5 @@ lexer = { path = "../lexer" }
 parser = { path = "../parser" }
 evaluator = { path = "../evaluator" }
 environment = { path = "../environment" }
+error = { path = "../error" }
 rustyline = { version = "11.0.0" }

@@ -1,5 +1,8 @@
 use std::fmt::Debug;
+
 use log::debug;
+
+use error::EvaluatorError;
 
 use crate::token::{Token, TokenType};
 
@@ -93,7 +96,7 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Result<Token, EvaluatorError> {
         // Skip whitespace
         self.skip_whitespace();
 
@@ -175,9 +178,8 @@ impl Lexer {
 
                 Token::new(TokenType::INT(literal.parse::<i64>().unwrap()), self.line, self.column)
             }
-            '"' => {
+            '"' | '\'' => {
                 let quote = self.ch;
-                debug_assert!(quote == '"');
                 has_read = true;
                 let start = self.position + 1;
                 let mut is_escaped = false;
@@ -197,10 +199,11 @@ impl Lexer {
                     .replace("\\\\", "\\")
                     .replace("\\\"", "\"")
                     .replace("\\'", "'");
+
                 // if not closed, return illegal token
-                if self.ch != '"' {
+                if self.ch != quote {
                     // TODO: return error
-                    return Token::new(TokenType::ILLEGAL('"'), self.line, self.column);
+                    return Err(EvaluatorError::unfinished_string(literal, self.line, self.column));
                 }
 
                 self.next_char();
@@ -214,7 +217,7 @@ impl Lexer {
             self.next_char();
         }
 
-        return token;
+        return Ok(token);
     }
 }
 
@@ -251,7 +254,7 @@ mod tests {
 
         let mut lexer = Lexer::new(input.to_string());
         for expected_token in expected_tokens {
-            let token = lexer.next_token();
+            let token = lexer.next_token().unwrap();
             assert_eq!(token.kind, expected_token);
         }
 
@@ -373,7 +376,7 @@ mod tests {
 
         let mut lexer = Lexer::new(input.to_string());
         for expected_token in expected_tokens {
-            let token = lexer.next_token();
+            let token = lexer.next_token().unwrap();
             assert_eq!(token.kind, expected_token.kind);
 
             match token.kind {
@@ -418,7 +421,7 @@ mod tests {
 
         let mut lexer = Lexer::new(input.to_string());
         for expected_token in expected_tokens {
-            let token = lexer.next_token();
+            let token = lexer.next_token().unwrap();
             println!("{:?} {:?}", token.kind, expected_token.kind);
             assert_eq!(token.kind, expected_token.kind);
 
