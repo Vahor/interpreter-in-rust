@@ -1,7 +1,7 @@
 use environment::object::ObjectType;
 use error::EvaluatorError;
 
-pub fn last(args: Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
+pub fn last(args: &Vec<&mut ObjectType>) -> Result<ObjectType, EvaluatorError> {
     if args.len() != 1 {
         return Err(EvaluatorError::wrong_number_of_arguments(1, args.len()));
     }

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use ast::expression::Expression;
 use ast::statement::BlockStatement;
@@ -10,7 +10,7 @@ pub trait Object {
     fn inspect(&self) -> String;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone)]
 pub enum ObjectType {
     Null,
 
@@ -25,9 +25,26 @@ pub enum ObjectType {
         environment: Environment,
     },
 
-    Builtin(fn(Vec<ObjectType>) -> Result<ObjectType, EvaluatorError>),
+    Builtin(fn(&Vec<&mut ObjectType>) -> Result<ObjectType, EvaluatorError>),
 
     Array(Vec<ObjectType>),
+}
+
+impl PartialEq for ObjectType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ObjectType::Null, ObjectType::Null) => true,
+            (ObjectType::Integer(i), ObjectType::Integer(j)) => i == j,
+            (ObjectType::Boolean(b), ObjectType::Boolean(c)) => b == c,
+            (ObjectType::String(s), ObjectType::String(t)) => s == t,
+            (ObjectType::Return(obj), other) => obj.as_ref() == other,
+            (ObjectType::Function { .. }, ObjectType::Function { .. }) => false,
+            (ObjectType::Builtin(_), ObjectType::Builtin(_)) => false,
+            (ObjectType::Array(arr), ObjectType::Array(other_arr)) => arr == other_arr,
+            _ => false,
+        }
+    }
+
 }
 
 
@@ -59,6 +76,12 @@ impl Object for ObjectType {
                 out
             }
         }
+    }
+}
+
+impl Debug for ObjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inspect())
     }
 }
 

@@ -79,11 +79,14 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
             let arguments = arguments.iter();
 
             for argument in arguments {
-                evaluated_arguments.push(eval_expression(environment, argument)?);
+                let evaluated = eval_expression(environment, argument)?;
+                evaluated_arguments.push(evaluated);
             }
 
+            let evaluated_arguments = evaluated_arguments.iter_mut().collect();
+
             return apply_function(environment, &evaluated, &evaluated_arguments);
-        },
+        }
         Expression::ArrayLiteral(elements) => {
             let mut result = vec![];
 
@@ -219,7 +222,7 @@ fn eval_if_expression(environment: &mut Environment, condition: &Expression, con
     Ok(ObjectType::Null)
 }
 
-fn apply_function(outer_environment: &Environment, function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
+fn apply_function(outer_environment: &Environment, function: &ObjectType, args: &Vec<&mut ObjectType>) -> Result<ObjectType, EvaluatorError> {
     if let ObjectType::Function { parameters, body, environment } = function {
         let mut enclosing_environment = Environment::new_enclosed(outer_environment);
         enclosing_environment.merge(environment); // TODO: this is a hack, we should not clone but use references !!!
@@ -228,15 +231,15 @@ fn apply_function(outer_environment: &Environment, function: &ObjectType, args: 
             return Err(EvaluatorError::wrong_number_of_arguments(parameters.len(), args.len()));
         }
 
-        for (value, name) in parameters.iter().zip(args.iter()) {
-            enclosing_environment.set(value.to_string().as_str(), name.clone()); // TODO: remove clone
+        for (name, value) in parameters.iter().zip(args.iter()) {
+            enclosing_environment.set(name.to_string().as_str(), (*value).clone()); // TODO: remove clone
         }
 
         return eval_block_statement(&mut enclosing_environment, body);
     }
 
     if let ObjectType::Builtin(function) = function {
-        return function(args.clone()); // TODO: remove clone
+        return function(args); // TODO: remove clone
     }
 
     Err(EvaluatorError::operator_not_supported(function.to_string()))
@@ -539,6 +542,19 @@ mod tests {
             (r#"last([1, 2, 3])"#, Ok(ObjectType::Integer(3))),
             (r#"last([])"#, Ok(ObjectType::Null)),
             (r#"last(1)"#, Err(EvaluatorError::argument_type_not_supported("last", "1"))),
+            // push
+            (r#"let push = 5;"#, Err(EvaluatorError::built_in_function("push"))),
+            (r#"push([1, 2, 3], 4)"#, Ok(ObjectType::Array(vec![ObjectType::Integer(1), ObjectType::Integer(2), ObjectType::Integer(3), ObjectType::Integer(4)]))),
+            (r#"push(1, 2)"#, Err(EvaluatorError::argument_type_not_supported("push", "1"))),
+            // TODO: this will work when the clone will be removed
+            // (r#"let a = [1, 2, 3]; let b = push(a, 4); a;"#, Ok(ObjectType::Array(vec![ObjectType::Integer(1), ObjectType::Integer(2), ObjectType::Integer(3)]))),
+            // pop
+            (r#"let pop = 5;"#, Err(EvaluatorError::built_in_function("pop"))),
+            (r#"pop([1, 2, 3])"#, Ok(ObjectType::Integer(3))),
+            (r#"pop([])"#, Ok(ObjectType::Null)),
+            (r#"pop(1)"#, Err(EvaluatorError::argument_type_not_supported("pop", "1"))),
+            // TODO: this will work when the clone will be removed
+            // (r#"let a = [1, 2, 3]; let b = pop(a); a;"#, Ok(ObjectType::Array(vec![ObjectType::Integer(1), ObjectType::Integer(2)]))),
         ];
 
         tests.iter().for_each(|(input, result)| {
