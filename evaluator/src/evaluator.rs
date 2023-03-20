@@ -83,6 +83,23 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
             }
 
             return apply_function(environment, &evaluated, &evaluated_arguments);
+        },
+        Expression::ArrayLiteral(elements) => {
+            let mut result = vec![];
+
+            let elements = elements.iter();
+
+            for element in elements {
+                result.push(eval_expression(environment, element)?);
+            }
+
+            Ok(ObjectType::Array(result))
+        },
+        Expression::IndexExpression {left, index} => {
+            let left = eval_expression(environment, left)?;
+            let index = eval_expression(environment, index)?;
+
+            return eval_index_expression(&left, &index);
         }
         _ => Err(EvaluatorError::operator_not_supported(expr.to_string())),
     };
@@ -202,14 +219,6 @@ fn eval_if_expression(environment: &mut Environment, condition: &Expression, con
     Ok(ObjectType::Null)
 }
 
-fn is_truthy(obj: &ObjectType) -> bool {
-    match obj {
-        ObjectType::Boolean(value) => *value,
-        ObjectType::Null => false,
-        _ => true,
-    }
-}
-
 fn apply_function(outer_environment: &Environment, function: &ObjectType, args: &Vec<ObjectType>) -> Result<ObjectType, EvaluatorError> {
     if let ObjectType::Function { parameters, body, environment } = function {
         let mut enclosing_environment = Environment::new_enclosed(outer_environment);
@@ -231,6 +240,42 @@ fn apply_function(outer_environment: &Environment, function: &ObjectType, args: 
     }
 
     Err(EvaluatorError::operator_not_supported(function.to_string()))
+}
+
+fn eval_index_expression(left: &ObjectType, index: &ObjectType) -> Result<ObjectType, EvaluatorError> {
+    match (left, index) {
+        (ObjectType::Array(elements), ObjectType::Integer(index)) => {
+            let max_index = elements.len() as i64;
+            if *index < 0{
+                return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
+            }
+            if *index >= max_index {
+                return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
+            }
+
+            Ok(elements[*index as usize].clone()) // TODO: remove clone
+        }
+        (ObjectType::String(value), ObjectType::Integer(index)) => {
+            let max_index = value.len() as i64;
+            if *index < 0{
+                return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
+            }
+            if *index >= max_index {
+                return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
+            }
+
+            Ok(ObjectType::String(value.chars().nth(*index as usize).unwrap().to_string()))
+        }
+        _ => Err(EvaluatorError::operator_not_supported(left.to_string())),
+    }
+}
+
+fn is_truthy(obj: &ObjectType) -> bool {
+    match obj {
+        ObjectType::Boolean(value) => *value,
+        ObjectType::Null => false,
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -258,7 +303,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_integer_literal() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -288,7 +332,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_boolean_literal() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -328,7 +371,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_string_literal() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -345,7 +387,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_bang_operator() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -368,7 +409,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_if_else_expressions() {
         let tests = vec![
             ("if (true) {10}", ObjectType::Integer(10)),
@@ -387,7 +427,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_return_statements() {
         let tests = vec![
             ("return 10;", ObjectType::Integer(10)),
@@ -404,7 +443,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_let_statements() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -423,7 +461,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_function_definition() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -441,7 +478,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_function_application() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -462,7 +498,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_closure() {
         std::env::set_var("RUST_LOG", "trace");
         let _ = env_logger::try_init();
@@ -493,6 +528,37 @@ mod tests {
             (r#"len("hello world")"#, Ok(ObjectType::Integer(11))),
             (r#"len(1)"#, Err(EvaluatorError::argument_type_not_supported("len", "1"))),
             (r#"len("one", "two")"#, Err(EvaluatorError::wrong_number_of_arguments(1, 2))),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            if let Err(e) = result {
+                let err = evaluated.err().unwrap();
+                assert_eq!(err, *e);
+            } else {
+                assert_eq!(evaluated, *result);
+            }
+        })
+    }
+
+    #[test]
+    fn test_array() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            (r#"[]"#, Ok(ObjectType::Array(vec![]))),
+            (r#"[1, 2 * 2, 3 + 3]"#, Ok(ObjectType::Array(vec![ObjectType::Integer(1), ObjectType::Integer(4), ObjectType::Integer(6)]))),
+            (r#"let i = 0; [i]"#, Ok(ObjectType::Array(vec![ObjectType::Integer(0)]))),
+            (r#"[1, 2, 3][0]"#, Ok(ObjectType::Integer(1))),
+            (r#"[1, 2, 3][1]"#, Ok(ObjectType::Integer(2))),
+            (r#"[1, 2, 3][2]"#, Ok(ObjectType::Integer(3))),
+            (r#"[1, 2, 3][3]"#, Err(EvaluatorError::index_out_of_bounds(3, 3))),
+            (r#"[1, 2, 3][-1]"#, Err(EvaluatorError::index_out_of_bounds(-1, 3))),
+            (r#"[1, 2, 3][1 + 1]"#, Ok(ObjectType::Integer(3))),
+            (r#"let i = 2; [1, 2, 3][i]"#, Ok(ObjectType::Integer(3))),
+            (r#""Hello"[0]"#, Ok(ObjectType::String("H".to_string()))),
+            (r#""Hello"[9]"#, Err(EvaluatorError::index_out_of_bounds(9, 5))),
         ];
 
         tests.iter().for_each(|(input, result)| {

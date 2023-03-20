@@ -25,7 +25,9 @@ pub enum ObjectType {
         environment: Environment,
     },
 
-    Builtin(fn(Vec<ObjectType>) -> Result<ObjectType, EvaluatorError>)
+    Builtin(fn(Vec<ObjectType>) -> Result<ObjectType, EvaluatorError>),
+
+    Array(Vec<ObjectType>),
 }
 
 
@@ -49,6 +51,13 @@ impl Object for ObjectType {
                 out
             }
             ObjectType::Builtin(_) => "builtin function".to_string(),
+            ObjectType::Array(arr) => {
+                let mut out = String::new();
+                out.push_str("[");
+                out.push_str(&arr.iter().map(|o| o.inspect()).collect::<Vec<String>>().join(", "));
+                out.push_str("]");
+                out
+            }
         }
     }
 }

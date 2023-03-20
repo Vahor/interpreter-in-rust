@@ -33,10 +33,12 @@ pub enum TokenType {
     COMMA,
     SEMICOLON,
 
-    LPAREN,
-    RPAREN,
-    LBRACE,
-    RBRACE,
+    LPAREN, // (
+    RPAREN, // )
+    LBRACE, // {
+    RBRACE, // }
+    LBRACKET, // [
+    RBRACKET, // ]
 
     // Keywords
     FUNCTION,
@@ -74,6 +76,8 @@ impl Display for TokenType {
             TokenType::RPAREN => write!(f, ")"),
             TokenType::LBRACE => write!(f, "{{"),
             TokenType::RBRACE => write!(f, "}}"),
+            TokenType::LBRACKET => write!(f, "["),
+            TokenType::RBRACKET => write!(f, "]"),
             TokenType::FUNCTION => write!(f, "FUNCTION"),
             TokenType::LET => write!(f, "LET"),
             TokenType::TRUE => write!(f, "TRUE"),
@@ -100,6 +104,7 @@ impl Into<Precedence> for TokenType {
             TokenType::SLASH => Precedence::PRODUCT,
             TokenType::ASTERISK => Precedence::PRODUCT,
             TokenType::LPAREN => Precedence::CALL,
+            TokenType::LBRACKET => Precedence::INDEX,
             _ => Precedence::LOWEST,
         };
     }

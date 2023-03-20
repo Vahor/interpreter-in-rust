@@ -7,6 +7,7 @@ pub enum Expression {
     StringLiteral(String),
     IntegerLiteral(i64),
     BooleanLiteral(bool),
+    ArrayLiteral(Vec<Expression>),
 
     Identifier(String),
 
@@ -41,6 +42,11 @@ pub enum Expression {
         function: Box<Expression>,
         arguments: Vec<Expression>,
     },
+
+    IndexExpression {
+        left: Box<Expression>,
+        index: Box<Expression>,
+    },
 }
 
 impl Display for Expression {
@@ -50,6 +56,13 @@ impl Display for Expression {
             Expression::IntegerLiteral(int) => write!(f, "{}", int),
             Expression::BooleanLiteral(boolean) => write!(f, "{}", boolean),
             Expression::Identifier(identifier) => write!(f, "{}", identifier),
+            Expression::ArrayLiteral(elements) => {
+                let mut result = String::new();
+                result.push_str("[");
+                result.push_str(elements.iter().map(|v| { v.to_string() }).collect::<Vec<_>>().join(", ").as_str());
+                result.push_str("]");
+                return write!(f, "{}", result);
+            }
             Expression::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
             Expression::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),
             Expression::GroupedExpression { expression } => write!(f, "({})", expression),
@@ -91,6 +104,7 @@ impl Display for Expression {
                 result.push_str(")");
                 return write!(f, "{}", result);
             }
+            Expression::IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
         };
     }
 }

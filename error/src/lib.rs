@@ -51,6 +51,12 @@ pub enum EvaluatorError {
         column: u32,
     },
 
+    #[error("{index} is out of bounds for array of size {size}")]
+    IndexOutOfBounds {
+        index: i64,
+        size: usize,
+    },
+
     #[error("Unknown error")]
     UnknownError,
 }
@@ -116,6 +122,13 @@ impl EvaluatorError {
             actual: actual.to_string(),
             line,
             column,
+        }
+    }
+
+    pub fn index_out_of_bounds(index: i64, size: usize) -> EvaluatorError {
+        EvaluatorError::IndexOutOfBounds {
+            index,
+            size,
         }
     }
 

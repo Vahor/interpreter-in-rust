@@ -145,6 +145,8 @@ impl Lexer {
             ')' => Token::new(TokenType::RPAREN, self.line, self.column),
             '{' => Token::new(TokenType::LBRACE, self.line, self.column),
             '}' => Token::new(TokenType::RBRACE, self.line, self.column),
+            '[' => Token::new(TokenType::LBRACKET, self.line, self.column),
+            ']' => Token::new(TokenType::RBRACKET, self.line, self.column),
             '\0' => Token::new(TokenType::EOF, self.line, self.column),
             'a'..='z' | 'A'..='Z' | '_' => {
                 has_read = true;
@@ -289,6 +291,8 @@ mod tests {
             "hello \"world\""
             "hello \n world"
             "hello \t\t\t world"
+
+            [1, 2];
         "#;
 
         let expected_tokens = vec![
@@ -370,6 +374,13 @@ mod tests {
             Token::with_type(TokenType::STRING("hello \"world\"".to_string())),
             Token::with_type(TokenType::STRING("hello \n world".to_string())),
             Token::with_type(TokenType::STRING("hello \t\t\t world".to_string())),
+//
+            Token::with_type(TokenType::LBRACKET),
+            Token::with_type(TokenType::INT(1)),
+            Token::with_type(TokenType::COMMA),
+            Token::with_type(TokenType::INT(2)),
+            Token::with_type(TokenType::RBRACKET),
+            Token::with_type(TokenType::SEMICOLON),
 //
             Token::with_type(TokenType::EOF),
         ];

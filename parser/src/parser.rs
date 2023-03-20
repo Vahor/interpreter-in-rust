@@ -1,5 +1,5 @@
 use std::sync::atomic::Ordering;
-use log::debug;
+use log::{debug, warn};
 use ast::expression::Expression;
 use ast::expression::Expression::{BooleanLiteral, IntegerLiteral, StringLiteral};
 use ast::program::Program;
@@ -172,23 +172,18 @@ impl Parser {
     fn parse_block_statement(&mut self) -> Result<BlockStatement, EvaluatorError> {
         let mut statements: BlockStatement = vec![];
 
-        if matches!(self.cur_token.kind, TokenType::LBRACE) {
-            self.next_token()?; // (cur_token) Skip past the LBRACE
-        }
+        self.next_token()?; // (cur_token) Skip past the LBRACE
 
         while !matches!(self.cur_token.kind, TokenType::RBRACE | TokenType::EOF) {
-            let statement = self.parse_statement();
+            let statement = self.parse_statement()?;
 
-            if statement.is_err() {
-                return Err(statement.err().unwrap());
-            }
-
-            if !matches!(statement.as_ref().unwrap(), Statement::EmptyStatement) {
-                statements.push(statement.unwrap());
+            if !matches!(statement, Statement::EmptyStatement) {
+                statements.push(statement);
             }
 
             self.next_token()?;
         }
+
         Ok(statements)
     }
 
@@ -204,6 +199,7 @@ impl Parser {
             TokenType::LPAREN => self.parse_grouped_expression(),
             TokenType::IF => self.parse_if_expression(),
             TokenType::FUNCTION => self.parse_function_literal(),
+            TokenType::LBRACKET => self.parse_array_literal(),
             _ => Err(self.expected_error_curr("Expression".to_string())),
         };
 
@@ -227,8 +223,12 @@ impl Parser {
                 }
                 TokenType::LPAREN => {
                     self.next_token()?;
-
                     let right_expression = self.parse_call_expression(left_expression.clone())?;
+                    left_expression = right_expression;
+                },
+                TokenType::LBRACKET => {
+                    self.next_token()?;
+                    let right_expression = self.parse_index_expression(left_expression.clone())?;
                     left_expression = right_expression;
                 }
                 _ => break,
@@ -248,7 +248,7 @@ impl Parser {
     }
 
     fn parse_int_literal(&mut self) -> Result<Expression, EvaluatorError> {
-        let token = self.cur_token.clone();
+        let token = &self.cur_token;
         if let TokenType::INT(value) = token.kind {
             return Ok(IntegerLiteral(value));
         }
@@ -256,17 +256,20 @@ impl Parser {
         Err(self.expected_error_curr("INT".to_string()))
     }
 
-    fn parse_string_literal(&mut self) -> Result<Expression, EvaluatorError> {
-        let token = self.cur_token.clone();
-        if let TokenType::STRING(value) = token.kind {
-            return Ok(StringLiteral(value));
-        }
+    fn parse_prefix_expression(&mut self) -> Result<Expression, EvaluatorError> {
+        let operator = self.cur_token.kind.to_string();
 
-        Err(self.expected_error_curr("STRING".to_string()))
+        self.next_token()?; // Skip operator
+        let right = self.parse_expression(&Precedence::PREFIX)?;
+
+        Ok(Expression::PrefixExpression {
+            operator,
+            right: Box::new(right),
+        })
     }
 
     fn parse_boolean_literal(&mut self) -> Result<Expression, EvaluatorError> {
-        let token = self.cur_token.clone();
+        let token = &self.cur_token;
         return match token.kind {
             TokenType::TRUE | TokenType::FALSE => {
                 Ok(BooleanLiteral(token.kind == TokenType::TRUE))
@@ -275,37 +278,16 @@ impl Parser {
         };
     }
 
-    fn parse_prefix_expression(&mut self) -> Result<Expression, EvaluatorError> {
-        let token = self.cur_token.clone();
-        self.next_token()?; // Skip operator
+    fn parse_grouped_expression(&mut self) -> Result<Expression, EvaluatorError> {
+        self.next_token()?; // (peek) Skip past the LPAREN
+        let expression = self.parse_expression(&Precedence::LOWEST)?;
 
-        let right = self.parse_expression(&Precedence::PREFIX);
-        if right.is_err() {
-            return Err(right.err().unwrap());
+        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            return Err(self.expected_error_peek(")".to_string()));
         }
+        self.next_token()?; // (peek) Skip past the RPAREN
 
-        Ok(Expression::PrefixExpression {
-            operator: token.kind.to_string(),
-            right: Box::new(right.unwrap()),
-        })
-    }
-
-    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, EvaluatorError> {
-        let token = self.cur_token.clone();
-
-        let precedence = self.cur_token.to_precedence();
-        self.next_token()?;
-
-        let right = self.parse_expression(&precedence);
-        if right.is_err() {
-            return Ok(left);
-        }
-
-        Ok(Expression::InfixExpression {
-            operator: token.kind.to_string(),
-            left: Box::new(left),
-            right: Box::new(right.unwrap()),
-        })
+        Ok(expression)
     }
 
     fn parse_if_expression(&mut self) -> Result<Expression, EvaluatorError> {
@@ -315,10 +297,7 @@ impl Parser {
         self.next_token()?; // (peek) Skip past the LPAREN
 
         self.next_token()?; // (curr) Skip past the LPAREN
-        let condition = self.parse_expression(&Precedence::LOWEST);
-        if condition.is_err() {
-            return Err(condition.err().unwrap());
-        }
+        let condition = self.parse_expression(&Precedence::LOWEST)?;
 
 
         if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
@@ -331,11 +310,7 @@ impl Parser {
         }
         self.next_token()?; // (peek) Skip past the LBRACE
 
-        let consequence = self.parse_block_statement();
-
-        if consequence.is_err() {
-            return Err(consequence.err().unwrap());
-        }
+        let consequence = self.parse_block_statement()?;
 
         let mut alternative = None;
         if matches!(&self.peek_token.kind, TokenType::ELSE) {
@@ -346,33 +321,55 @@ impl Parser {
             }
             self.next_token()?; // (peek) Skip past the LBRACE
 
-            let block = self.parse_block_statement();
-            if block.is_err() {
-                return Err(block.err().unwrap());
-            }
-            alternative = Some(block.unwrap());
+            let block = self.parse_block_statement()?;
+            alternative = Some(block);
         }
 
         Ok(Expression::IfExpression {
-            condition: Box::new(condition.unwrap()),
-            consequence: consequence.unwrap(),
+            condition: Box::new(condition),
+            consequence,
             alternative,
         })
     }
 
-    fn parse_grouped_expression(&mut self) -> Result<Expression, EvaluatorError> {
-        self.next_token()?; // (peek) Skip past the LPAREN
-        let expression = self.parse_expression(&Precedence::LOWEST);
-        if expression.is_err() {
-            return Err(expression.err().unwrap());
+    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, EvaluatorError> {
+        let operator = self.cur_token.kind.to_string();
+
+        let precedence = self.cur_token.to_precedence();
+        self.next_token()?;
+
+        let right = self.parse_expression(&precedence);
+        if right.is_err() {
+            debug!("Error parsing right expression: {:?}", right.err().unwrap());
+            return Ok(left);
         }
 
-        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            return Err(self.expected_error_peek(")".to_string()));
-        }
-        self.next_token()?; // (peek) Skip past the RPAREN
+        Ok(Expression::InfixExpression {
+            operator,
+            left: Box::new(left),
+            right: Box::new(right.unwrap()),
+        })
+    }
 
-        Ok(expression.unwrap())
+    fn parse_call_expression(&mut self, function: Expression) -> Result<Expression, EvaluatorError> {
+        let arguments = self.parse_call_arguments()?;
+
+        Ok(Expression::CallExpression {
+            function: Box::new(function),
+            arguments,
+        })
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, EvaluatorError> {
+        // fn ()
+        if matches!(&self.peek_token.kind, TokenType::RPAREN) {
+            self.next_token()?; // (peek) Skip past the RPAREN
+            return Ok(vec![]);
+        }
+
+        let arguments = self.parse_expression_list(&TokenType::RPAREN);
+
+        return arguments;
     }
 
     fn parse_function_literal(&mut self) -> Result<Expression, EvaluatorError> {
@@ -381,25 +378,18 @@ impl Parser {
         }
         self.next_token()?; // (peek) Skip past the LPAREN
 
-        let parameters = self.parse_function_parameters();
-        if parameters.is_err() {
-            return Err(parameters.err().unwrap());
-        }
-        let parameters = parameters.unwrap();
+        let parameters = self.parse_function_parameters()?;
 
         if !matches!(&self.peek_token.kind, TokenType::LBRACE) {
             return Err(self.expected_error_peek("{".to_string()));
         }
         self.next_token()?; // (peek) Skip past the LBRACE
 
-        let body = self.parse_block_statement();
-        if body.is_err() {
-            return Err(body.err().unwrap());
-        }
+        let body = self.parse_block_statement()?;
 
         Ok(Expression::FunctionLiteral {
             parameters,
-            body: body.unwrap(),
+            body,
         })
     }
 
@@ -438,51 +428,60 @@ impl Parser {
         Ok(identifiers)
     }
 
-    fn parse_call_expression(&mut self, function: Expression) -> Result<Expression, EvaluatorError> {
-        let arguments = self.parse_call_arguments();
-        if arguments.is_err() {
-            return Err(arguments.err().unwrap());
+    fn parse_string_literal(&mut self) -> Result<Expression, EvaluatorError> {
+        let token = self.cur_token.clone();
+        if let TokenType::STRING(value) = token.kind {
+            return Ok(StringLiteral(value));
         }
 
-        Ok(Expression::CallExpression {
-            function: Box::new(function),
-            arguments: arguments.unwrap(),
-        })
+        Err(self.expected_error_curr("STRING".to_string()))
     }
 
-    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, EvaluatorError> {
-        let mut arguments = Vec::new();
+    fn parse_array_literal(&mut self) -> Result<Expression, EvaluatorError> {
+        let elements = self.parse_expression_list(&TokenType::RBRACKET)?;
 
-        // fn ()
-        if matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            self.next_token()?; // (peek) Skip past the RPAREN
-            return Ok(arguments);
+        Ok(Expression::ArrayLiteral(elements))
+    }
+
+    fn parse_expression_list(&mut self, end: &TokenType) -> Result<Vec<Expression>, EvaluatorError> {
+        let mut elements: Vec<Expression> = vec![];
+
+        if &self.peek_token.kind == end {
+            self.next_token()?; // (peek) Skip past the end token
+            return Ok(elements);
         }
 
-        self.next_token()?; // (peek) Skip past the first argument
-        let argument = self.parse_expression(&Precedence::LOWEST);
-        if argument.is_err() {
-            return Err(self.expected_error_curr("argument".to_string()));
-        }
-        arguments.push(argument.unwrap());
+        self.next_token()?; // (cur_token) Skip past the end token
+        elements.push(self.parse_expression(&Precedence::LOWEST)?);
 
-        while matches!(&self.peek_token.kind, TokenType::COMMA) {
-            self.next_token()?; // (peek) Skip past the COMMA
-            self.next_token()?; // (peek) Skip past the next argument
+        while matches!(self.peek_token.kind, TokenType::COMMA) {
+            self.next_token()?; // (peek_token) Skip past the COMMA
+            self.next_token()?; // (cur_token) Skip past the COMMA
 
-            let argument = self.parse_expression(&Precedence::LOWEST);
-            if argument.is_err() {
-                return Err(self.expected_error_curr("argument".to_string()));
-            }
-            arguments.push(argument.unwrap());
+            elements.push(self.parse_expression(&Precedence::LOWEST)?);
         }
 
-        if !matches!(&self.peek_token.kind, TokenType::RPAREN) {
-            return Err(self.expected_error_peek(")".to_string()));
+        if &self.peek_token.kind != end {
+            return Err(self.expected_error_peek(TokenType::RBRACKET.to_string()));
         }
-        self.next_token()?; // (peek) Skip past the RPAREN
+        self.next_token()?; // (peek) Skip past the RBRACKET
 
-        Ok(arguments)
+        Ok(elements)
+    }
+
+    fn parse_index_expression(&mut self, left: Expression) -> Result<Expression, EvaluatorError> {
+        self.next_token()?; // (peek) Skip past the LBRACKET
+        let index = self.parse_expression(&Precedence::LOWEST)?;
+
+        if !matches!(&self.peek_token.kind, TokenType::RBRACKET) {
+            return Err(self.expected_error_peek("]".to_string()));
+        }
+        self.next_token()?; // (peek) Skip past the LBRACKET
+
+        Ok(Expression::IndexExpression {
+            left: Box::new(left),
+            index: Box::new(index),
+        })
     }
 }
 
@@ -843,4 +842,79 @@ add(a + b + c * d / f + g);
         assert_eq!(&program.statements[2].to_string(), "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));");
         assert_eq!(&program.statements[3].to_string(), "add((((a + b) + ((c * d) / f)) + g));");
     }
+
+    #[test]
+    fn test_array_literal() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        // [1];
+        // [1, 2 * 2, 3 + 3];
+        let input = r#"
+        [1];
+        [1, 2 * 2, 3 + 3];
+"#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 2);
+
+        assert_eq!(&program.statements[0].to_string(), "[1];");
+        assert_eq!(&program.statements[1].to_string(), "[1, (2 * 2), (3 + 3)];");
+    }
+
+    #[test]
+    fn test_array_index() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        // [1];
+        // [1, 2 * 2, 3 + 3];
+        let input = r#"
+        myArray[1 + 1];
+"#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 1);
+
+        assert_eq!(&program.statements[0].to_string(), "(myArray[(1 + 1)]);");
+    }
+
+    #[test]
+    fn test_precedence() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let input = r#"
+        a * [1, 2, 3, 4][b * c] * d;
+        add(a * b[2], b[1], 2 * [1, 2][1]);
+"#;
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 2);
+
+        assert_eq!(&program.statements[0].to_string(), "((a * ([1, 2, 3, 4][(b * c)])) * d);");
+        assert_eq!(&program.statements[1].to_string(), "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])));");
+    }
+
 }

@@ -2,17 +2,20 @@ use std::fmt::Debug;
 
 pub enum Precedence {
     LOWEST,
+    /// ==
     EQUALS,
-    // ==
+    /// > or <
     LESSGREATER,
-    // > or <
+    /// +
     SUM,
-    // +
+    /// *
     PRODUCT,
-    // *
+    /// -X or !X
     PREFIX,
-    // -X or !X
-    CALL, // myFunction(X)
+    /// myFunction(X)
+    CALL,
+    /// array\[index]
+    INDEX,
 }
 
 impl Precedence {
@@ -25,6 +28,7 @@ impl Precedence {
             Precedence::PRODUCT => 5,
             Precedence::PREFIX => 6,
             Precedence::CALL => 7,
+            Precedence::INDEX => 8,
         };
     }
 }
@@ -39,6 +43,7 @@ impl Debug for Precedence {
             Precedence::PRODUCT => write!(f, "PRODUCT ({})", self.value()),
             Precedence::PREFIX => write!(f, "PREFIX ({})", self.value()),
             Precedence::CALL => write!(f, "CALL ({})", self.value()),
+            Precedence::INDEX => write!(f, "INDEX ({})", self.value()),
         };
     }
 }
