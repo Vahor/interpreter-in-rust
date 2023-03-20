@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use log::debug;
-
 use error::EvaluatorError;
 
 use crate::token::{Token, TokenType};

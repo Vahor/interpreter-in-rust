@@ -24,6 +24,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
     let lexer = Lexer::default();
     let mut parser = Parser::new(lexer)?;
     let mut environment = Environment::new();
+    let print_evaluated_result = flags::PRINT_EVALUATED_RESULT.load(std::sync::atomic::Ordering::Relaxed);
 
     if reader.load_history("history.txt").is_err() {
         info!("No previous history.");
@@ -67,7 +68,9 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
                 }
 
                 let evaluated = evaluated.unwrap();
-                println!("{}", evaluated);
+                if print_evaluated_result {
+                    println!("{}", evaluated);
+                }
             }
             Err(ReadlineError::Interrupted) => {
                 warn!("CTRL-C");

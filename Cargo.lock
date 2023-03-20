@@ -456,6 +456,7 @@ dependencies = [
  "environment",
  "error",
  "evaluator",
+ "flags",
  "lexer",
  "log",
  "parser",

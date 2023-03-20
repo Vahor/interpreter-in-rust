@@ -56,7 +56,7 @@ impl Object for ObjectType {
             ObjectType::Null => "null".to_string(),
             ObjectType::Integer(i) => format!("{}", i),
             ObjectType::Boolean(b) => format!("{}", b),
-            ObjectType::String(s) => format!("\"{}\"", s),
+            ObjectType::String(s) => format!("{}", s),
             ObjectType::Return(obj) => obj.inspect(),
             ObjectType::Function { parameters, body, .. } => {
                 let mut out = String::new();

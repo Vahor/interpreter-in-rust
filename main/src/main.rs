@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
-use flags::STOP_AT_FIRST_ERROR;
 
 #[derive(Parser, Debug)]
 #[command(name = "Interpreter")]
@@ -24,6 +23,11 @@ struct Args {
     /// (default: false)
     #[arg(short = 's', long = "stop-on-error")]
     stop_on_error: bool,
+
+    /// (Optional) Prints the evaluated result
+    /// (default: false)
+    #[arg(short = 'p', long = "print")]
+    print: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -44,7 +48,11 @@ fn main() -> Result<(), anyhow::Error> {
         },
         None => {
             if args.stop_on_error {
-                STOP_AT_FIRST_ERROR.store(true, std::sync::atomic::Ordering::Relaxed);
+                flags::STOP_AT_FIRST_ERROR.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+
+            if args.print {
+                flags::PRINT_EVALUATED_RESULT.store(true, std::sync::atomic::Ordering::Relaxed);
             }
 
             if args.inline.is_some() {

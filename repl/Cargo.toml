@@ -13,4 +13,5 @@ parser = { path = "../parser" }
 evaluator = { path = "../evaluator" }
 environment = { path = "../environment" }
 error = { path = "../error" }
+flags = { path = "../flags" }
 rustyline = { version = "11.0.0" }
