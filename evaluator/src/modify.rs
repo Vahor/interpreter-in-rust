@@ -1,4 +1,3 @@
-use log::debug;
 use ast::expression::Expression;
 use error::EvaluatorError;
 

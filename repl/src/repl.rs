@@ -36,7 +36,10 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
         match readline {
             Ok(line) => {
                 reader.add_history_entry(line.as_str())?;
-                parser.reset(line);
+                if let Err(err) = parser.reset(line) {
+                    error!("Error: {:}", err);
+                    continue;
+                }
 
                 let program = parser.parse_program();
 

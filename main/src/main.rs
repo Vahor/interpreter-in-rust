@@ -12,8 +12,8 @@ struct Args {
     command: Option<Commands>,
 
     /// Takes a string as input and executes it
-    #[arg(short = 'c', value_name = "INPUT")]
-    inline: Option<String>,
+    #[arg(short = 'e', value_name = "INPUT")]
+    expression: Option<String>,
 
     /// Takes a file as input and executes it
     #[arg(short = 'f', long = "file", value_name = "FILE")]
@@ -55,8 +55,8 @@ fn main() -> Result<(), anyhow::Error> {
                 flags::PRINT_EVALUATED_RESULT.store(true, std::sync::atomic::Ordering::Relaxed);
             }
 
-            if args.inline.is_some() {
-                let input = args.inline.unwrap();
+            if args.expression.is_some() {
+                let input = args.expression.unwrap();
                 info!("Executing inline input: {}", input);
                 repl::interpreter::execute_program(input)?;
                 return Ok(());

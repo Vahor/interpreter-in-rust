@@ -466,7 +466,7 @@ impl Parser {
         }
 
         if &self.peek_token.kind != end {
-            return Err(self.expected_error_peek(TokenType::RBRACKET.to_string()));
+            return Err(self.expected_error_peek(end.to_string()));
         }
         self.next_token()?; // (peek) Skip past the RBRACKET
 
