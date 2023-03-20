@@ -18,7 +18,7 @@ pub fn eval(program: &Program, environment: &mut Environment) -> Result<ObjectTy
 }
 
 
-fn eval_node(environment: &mut Environment, node: &Statement) -> Result<ObjectType, EvaluatorError> {
+pub fn eval_node(environment: &mut Environment, node: &Statement) -> Result<ObjectType, EvaluatorError> {
     return match node {
         Statement::ExpressionStatement(expr) => eval_expression(environment, expr),
         Statement::ReturnStatement { value } => {
@@ -555,6 +555,11 @@ mod tests {
             (r#"pop(1)"#, Err(EvaluatorError::argument_type_not_supported("pop", "1"))),
             // TODO: this will work when the clone will be removed
             // (r#"let a = [1, 2, 3]; let b = pop(a); a;"#, Ok(ObjectType::Array(vec![ObjectType::Integer(1), ObjectType::Integer(2)]))),
+            // rest
+            (r#"let rest = 5;"#, Err(EvaluatorError::built_in_function("rest"))),
+            (r#"rest([1, 2, 3])"#, Ok(ObjectType::Array(vec![ObjectType::Integer(2), ObjectType::Integer(3)]))),
+            (r#"rest([])"#, Ok(ObjectType::Null)),
+            (r#"rest(1)"#, Err(EvaluatorError::argument_type_not_supported("rest", "1"))),
         ];
 
         tests.iter().for_each(|(input, result)| {
