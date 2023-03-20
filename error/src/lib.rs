@@ -62,6 +62,16 @@ pub enum EvaluatorError {
         size: usize,
     },
 
+    #[error("No such key {key} in hash")]
+    NoSuchKey {
+        key: String,
+    },
+
+    #[error("Key not supported: {actual}")]
+    KeyNotSupported {
+        actual: String,
+    },
+
     #[error("Unknown error")]
     UnknownError,
 }
@@ -140,6 +150,18 @@ impl EvaluatorError {
     pub fn missing_argument(index: usize) -> EvaluatorError {
         EvaluatorError::MissingArgument {
             index,
+        }
+    }
+
+    pub fn no_such_key(key: String) -> EvaluatorError {
+        EvaluatorError::NoSuchKey {
+            key,
+        }
+    }
+
+    pub fn key_not_supported(actual: String) -> EvaluatorError {
+        EvaluatorError::KeyNotSupported {
+            actual,
         }
     }
 

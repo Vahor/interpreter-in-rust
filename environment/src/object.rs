@@ -18,6 +18,7 @@ pub enum ObjectType {
     Boolean(bool),
     String(String),
     Return(Box<ObjectType>),
+    Hash(Vec<(ObjectType, ObjectType)>),
 
     Function {
         parameters: Vec<Expression>,
@@ -41,6 +42,7 @@ impl PartialEq for ObjectType {
             (ObjectType::Function { .. }, ObjectType::Function { .. }) => false,
             (ObjectType::Builtin(_), ObjectType::Builtin(_)) => false,
             (ObjectType::Array(arr), ObjectType::Array(other_arr)) => arr == other_arr,
+            (ObjectType::Hash(hash), ObjectType::Hash(other_hash)) => hash == other_hash,
             _ => false,
         }
     }
@@ -54,7 +56,7 @@ impl Object for ObjectType {
             ObjectType::Null => "null".to_string(),
             ObjectType::Integer(i) => format!("{}", i),
             ObjectType::Boolean(b) => format!("{}", b),
-            ObjectType::String(s) => format!("{}", s),
+            ObjectType::String(s) => format!("\"{}\"", s),
             ObjectType::Return(obj) => obj.inspect(),
             ObjectType::Function { parameters, body, .. } => {
                 let mut out = String::new();
@@ -73,6 +75,13 @@ impl Object for ObjectType {
                 out.push_str("[");
                 out.push_str(&arr.iter().map(|o| o.inspect()).collect::<Vec<String>>().join(", "));
                 out.push_str("]");
+                out
+            }
+            ObjectType::Hash(hash) => {
+                let mut out = String::new();
+                out.push_str("{");
+                out.push_str(&hash.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join(", "));
+                out.push_str("}");
                 out
             }
         }

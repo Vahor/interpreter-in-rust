@@ -32,13 +32,14 @@ pub enum TokenType {
     // Delimiters
     COMMA,
     SEMICOLON,
+    COLON,
 
-    LPAREN, // (
-    RPAREN, // )
-    LBRACE, // {
-    RBRACE, // }
-    LBRACKET, // [
-    RBRACKET, // ]
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    RBRACE,
+    LBRACKET,
+    RBRACKET,
 
     // Keywords
     FUNCTION,
@@ -72,6 +73,7 @@ impl Display for TokenType {
             TokenType::NOT_EQ => write!(f, "!="),
             TokenType::COMMA => write!(f, ","),
             TokenType::SEMICOLON => write!(f, ";"),
+            TokenType::COLON => write!(f, ":"),
             TokenType::LPAREN => write!(f, "("),
             TokenType::RPAREN => write!(f, ")"),
             TokenType::LBRACE => write!(f, "{{"),

@@ -141,6 +141,7 @@ impl Lexer {
             }
             ',' => Token::new(TokenType::COMMA, self.line, self.column),
             ';' => Token::new(TokenType::SEMICOLON, self.line, self.column),
+            ':' => Token::new(TokenType::COLON, self.line, self.column),
             '(' => Token::new(TokenType::LPAREN, self.line, self.column),
             ')' => Token::new(TokenType::RPAREN, self.line, self.column),
             '{' => Token::new(TokenType::LBRACE, self.line, self.column),
@@ -231,7 +232,7 @@ mod tests {
 
     #[test]
     fn basic_tokens() {
-        let input = "=+-*/!<>(){},;==!=<=>=";
+        let input = "=+-*/!<>(){},;==!=<=>=:";
         let expected_tokens = vec![
             TokenType::ASSIGN,
             TokenType::PLUS,
@@ -251,6 +252,7 @@ mod tests {
             TokenType::NOT_EQ,
             TokenType::LTE,
             TokenType::GTE,
+            TokenType::COLON,
             TokenType::EOF,
         ];
 
@@ -293,6 +295,7 @@ mod tests {
             "hello \t\t\t world"
 
             [1, 2];
+            {"foo": "bar"}
         "#;
 
         let expected_tokens = vec![
@@ -381,6 +384,12 @@ mod tests {
             Token::with_type(TokenType::INT(2)),
             Token::with_type(TokenType::RBRACKET),
             Token::with_type(TokenType::SEMICOLON),
+//
+            Token::with_type(TokenType::LBRACE),
+            Token::with_type(TokenType::STRING("foo".to_string())),
+            Token::with_type(TokenType::COLON),
+            Token::with_type(TokenType::STRING("bar".to_string())),
+            Token::with_type(TokenType::RBRACE),
 //
             Token::with_type(TokenType::EOF),
         ];

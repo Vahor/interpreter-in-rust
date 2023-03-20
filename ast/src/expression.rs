@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 
 use crate::statement::BlockStatement;
@@ -8,6 +9,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     BooleanLiteral(bool),
     ArrayLiteral(Vec<Expression>),
+    HashLiteral(Vec<(Expression, Expression)>),
 
     Identifier(String),
 
@@ -52,7 +54,7 @@ pub enum Expression {
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return match self {
-            Expression::StringLiteral(string) => write!(f, "{}", string),
+            Expression::StringLiteral(string) => write!(f, "\"{}\"", string),
             Expression::IntegerLiteral(int) => write!(f, "{}", int),
             Expression::BooleanLiteral(boolean) => write!(f, "{}", boolean),
             Expression::Identifier(identifier) => write!(f, "{}", identifier),
@@ -105,6 +107,13 @@ impl Display for Expression {
                 return write!(f, "{}", result);
             }
             Expression::IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
+            Expression::HashLiteral(pairs) => {
+                let mut result = String::new();
+                result.push_str("{");
+                result.push_str(pairs.iter().map(|(key, value)| { format!("{}: {}", key, value) }).collect::<Vec<_>>().join(", ").as_str());
+                result.push_str("}");
+                return write!(f, "{}", result);
+            }
         };
     }
 }

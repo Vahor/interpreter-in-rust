@@ -8,7 +8,7 @@ use parser::parser::{Parser};
 pub fn execute_program(input: String) -> Result<(), anyhow::Error> {
     debug!("Executing program: {}", input);
     let lexer = Lexer::new(input);
-    let mut parser = Parser::new(lexer);
+    let mut parser = Parser::new(lexer)?;
     let mut environment = Environment::new();
 
     let program = parser.parse_program();

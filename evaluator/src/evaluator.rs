@@ -97,12 +97,27 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
             }
 
             Ok(ObjectType::Array(result))
-        },
-        Expression::IndexExpression {left, index} => {
+        }
+        Expression::IndexExpression { left, index } => {
             let left = eval_expression(environment, left)?;
             let index = eval_expression(environment, index)?;
 
             return eval_index_expression(&left, &index);
+        }
+        Expression::HashLiteral(pairs) => {
+            let mut result = vec![];
+            for (key, value) in pairs {
+                let key = eval_expression(environment, key)?;
+
+                // Not all keys are allowed
+                if matches!(key, ObjectType::Array(_) | ObjectType::Hash(_) | ObjectType::Function { .. }) {
+                    return Err(EvaluatorError::key_not_supported(key.to_string()));
+                }
+
+                let value = eval_expression(environment, value)?;
+                result.push((key, value));
+            }
+            return Ok(ObjectType::Hash(result));
         }
         _ => Err(EvaluatorError::operator_not_supported(expr.to_string())),
     };
@@ -249,7 +264,7 @@ fn eval_index_expression(left: &ObjectType, index: &ObjectType) -> Result<Object
     match (left, index) {
         (ObjectType::Array(elements), ObjectType::Integer(index)) => {
             let max_index = elements.len() as i64;
-            if *index < 0{
+            if *index < 0 {
                 return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
             }
             if *index >= max_index {
@@ -260,7 +275,7 @@ fn eval_index_expression(left: &ObjectType, index: &ObjectType) -> Result<Object
         }
         (ObjectType::String(value), ObjectType::Integer(index)) => {
             let max_index = value.len() as i64;
-            if *index < 0{
+            if *index < 0 {
                 return Err(EvaluatorError::index_out_of_bounds(*index, max_index as usize));
             }
             if *index >= max_index {
@@ -268,6 +283,15 @@ fn eval_index_expression(left: &ObjectType, index: &ObjectType) -> Result<Object
             }
 
             Ok(ObjectType::String(value.chars().nth(*index as usize).unwrap().to_string()))
+        }
+        (ObjectType::Hash(pairs), index) => {
+            for (key, value) in pairs {
+                if key == index {
+                    return Ok(value.clone()); // TODO: remove clone
+                }
+            }
+
+            Err(EvaluatorError::no_such_key(index.to_string()))
         }
         _ => Err(EvaluatorError::operator_not_supported(left.to_string())),
     }
@@ -284,6 +308,7 @@ fn is_truthy(obj: &ObjectType) -> bool {
 #[cfg(test)]
 mod tests {
     use log::debug;
+
     use lexer::lexer::Lexer;
     use parser::parser::Parser;
 
@@ -291,7 +316,7 @@ mod tests {
 
     fn test_eval(input: String) -> Result<ObjectType, EvaluatorError> {
         let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer)?;
         let mut env = Environment::new();
 
         let program = parser.parse_program();
@@ -591,6 +616,30 @@ mod tests {
             (r#"let i = 2; [1, 2, 3][i]"#, Ok(ObjectType::Integer(3))),
             (r#""Hello"[0]"#, Ok(ObjectType::String("H".to_string()))),
             (r#""Hello"[9]"#, Err(EvaluatorError::index_out_of_bounds(9, 5))),
+        ];
+
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            if let Err(e) = result {
+                let err = evaluated.err().unwrap();
+                assert_eq!(err, *e);
+            } else {
+                assert_eq!(evaluated, *result);
+            }
+        })
+    }
+
+    #[test]
+    fn test_hash() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            (r#"{1: 2, 3: 4}"#, Ok(ObjectType::Hash(vec![(ObjectType::Integer(1), ObjectType::Integer(2)), (ObjectType::Integer(3), ObjectType::Integer(4))]))),
+            (r#"{1: 2 + 2, 3: 4}"#, Ok(ObjectType::Hash(vec![(ObjectType::Integer(1), ObjectType::Integer(4)), (ObjectType::Integer(3), ObjectType::Integer(4))]))),
+            (r#"{1: 2, 3: 4}[1]"#, Ok(ObjectType::Integer(2))),
+            (r#"{1: 2, 3: 4}[3]"#, Ok(ObjectType::Integer(4))),
+            // (r#"{1: 2, 3: 4}[2]"#, Ok(ObjectType::Null)),
         ];
 
         tests.iter().for_each(|(input, result)| {

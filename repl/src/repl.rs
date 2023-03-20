@@ -22,7 +22,7 @@ fn build_caret(column: &u32, prompt_len: &u32) -> String {
 pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
     let mut reader = DefaultEditor::new()?;
     let lexer = Lexer::default();
-    let mut parser = Parser::new(lexer);
+    let mut parser = Parser::new(lexer)?;
     let mut environment = Environment::new();
 
     if reader.load_history("history.txt").is_err() {
@@ -48,10 +48,10 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
                                 if is_first {
                                     println!("{}", build_caret(column, prompt_len));
                                 }
-                                error!("Error: {:?}", error);
+                                error!("Error: {:}", error);
                             }
                             _ => {
-                                error!("Error: {:?}", error);
+                                error!("Error: {:}", error);
                             }
                         }
                         is_first = false;
@@ -62,7 +62,7 @@ pub fn start(prompt: &str) -> Result<(), anyhow::Error> {
                 let program = program.unwrap();
                 let evaluated = eval(&program, &mut environment);
                 if evaluated.is_err() {
-                    error!("Error: {:?}", evaluated.err().unwrap());
+                    error!("Error: {:}", evaluated.err().unwrap());
                     continue;
                 }
 

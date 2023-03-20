@@ -1,14 +1,16 @@
 use std::sync::atomic::Ordering;
-use log::{debug, warn};
+
+use log::{debug};
+
 use ast::expression::Expression;
 use ast::expression::Expression::{BooleanLiteral, IntegerLiteral, StringLiteral};
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
 use error::EvaluatorError;
+use flags::STOP_AT_FIRST_ERROR;
 use lexer::lexer::Lexer;
 use lexer::precedence::Precedence;
 use lexer::token::{Token, TokenType};
-use flags::STOP_AT_FIRST_ERROR;
 
 #[derive(Debug)]
 pub struct Parser {
@@ -18,7 +20,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(lexer: Lexer) -> Parser {
+    pub fn new(lexer: Lexer) -> Result<Parser, EvaluatorError> {
         let mut parser = Parser {
             lexer,
             cur_token: Token::default(),
@@ -26,16 +28,17 @@ impl Parser {
         };
 
         // Read two tokens so cur_token and peek_token are defined
-        parser.next_token().expect("Failed to read first token");
-        parser.next_token().expect("Failed to read second token");
+        parser.next_token()?;
+        parser.next_token()?;
 
-        parser
+        Ok(parser)
     }
 
-    pub fn reset(&mut self, input: String) {
+    pub fn reset(&mut self, input: String) -> Result<(), EvaluatorError> {
         self.lexer.reset(input);
-        self.next_token().expect("Failed to read first token");
-        self.next_token().expect("Failed to read second token");
+        self.next_token()?;
+        self.next_token()?;
+        Ok(())
     }
 
     fn expected_error_peek(&self, expected: String) -> EvaluatorError {
@@ -200,6 +203,7 @@ impl Parser {
             TokenType::IF => self.parse_if_expression(),
             TokenType::FUNCTION => self.parse_function_literal(),
             TokenType::LBRACKET => self.parse_array_literal(),
+            TokenType::LBRACE => self.parse_hash_literal(),
             _ => Err(self.expected_error_curr("Expression".to_string())),
         };
 
@@ -225,7 +229,7 @@ impl Parser {
                     self.next_token()?;
                     let right_expression = self.parse_call_expression(left_expression.clone())?;
                     left_expression = right_expression;
-                },
+                }
                 TokenType::LBRACKET => {
                     self.next_token()?;
                     let right_expression = self.parse_index_expression(left_expression.clone())?;
@@ -483,6 +487,39 @@ impl Parser {
             index: Box::new(index),
         })
     }
+
+    fn parse_hash_literal(&mut self) -> Result<Expression, EvaluatorError> {
+        let mut pairs: Vec<(Expression, Expression)> = vec![];
+
+        while !matches!(&self.peek_token.kind, TokenType::RBRACE) {
+            self.next_token()?; // (peek) Skip past the LBRACKET
+            let key = self.parse_expression(&Precedence::LOWEST)?;
+
+            if !matches!(&self.peek_token.kind, TokenType::COLON) {
+                return Err(self.expected_error_peek(":".to_string()));
+            }
+            self.next_token()?; // (peek) Skip past the COLON
+
+            self.next_token()?; // (curr) Skip past the COLON
+            let value = self.parse_expression(&Precedence::LOWEST)?;
+
+            pairs.push((key, value));
+
+            if !matches!(&self.peek_token.kind, TokenType::COMMA | TokenType::RBRACE) {
+                return Err(self.expected_error_peek(",".to_string()));
+            }
+            if matches!(&self.peek_token.kind, TokenType::COMMA)  {
+                self.next_token()?; // (peek) Skip past the COMMA
+            }
+        }
+
+        if !matches!(&self.peek_token.kind, TokenType::RBRACE) {
+            return Err(self.expected_error_peek("}".to_string()));
+        }
+        self.next_token()?; // (peek) Skip past the LBRACKET
+
+        Ok(Expression::HashLiteral(pairs))
+    }
 }
 
 #[cfg(test)]
@@ -579,7 +616,7 @@ mod tests {
         "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -605,7 +642,7 @@ mod tests {
         "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -630,7 +667,7 @@ mod tests {
         "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -657,7 +694,7 @@ mod tests {
         "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -714,7 +751,7 @@ mod tests {
 
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -774,7 +811,7 @@ if (x < 3 * y) { x + 1; } else { y }
         "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -801,7 +838,7 @@ fn(x, y) { x + y; }
 "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -828,7 +865,7 @@ add(a + b + c * d / f + g);
 "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -856,7 +893,7 @@ add(a + b + c * d / f + g);
 "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -881,7 +918,7 @@ add(a + b + c * d / f + g);
 "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -904,7 +941,7 @@ add(a + b + c * d / f + g);
 "#;
 
         let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer).unwrap();
         let program = parser.parse_program();
 
         assert!(program.is_ok());
@@ -917,4 +954,30 @@ add(a + b + c * d / f + g);
         assert_eq!(&program.statements[1].to_string(), "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])));");
     }
 
+    #[test]
+    fn test_hash_literal() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let input = r#"
+        {"one": 1, "two": 2, "three": 3};
+        {"one": 0 + 1, "two": 10 - 8, "three": 15 / 5};
+        {};
+"#;
+
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+
+        assert!(program.is_ok());
+
+        let program = program.unwrap();
+
+        assert_eq!(program.statements.len(), 3);
+
+        assert_eq!(&program.statements[0].to_string(), r#"{"one": 1, "two": 2, "three": 3};"#);
+        assert_eq!(&program.statements[1].to_string(), r#"{"one": (0 + 1), "two": (10 - 8), "three": (15 / 5)};"#);
+        assert_eq!(&program.statements[2].to_string(), "{};");
+    }
 }
