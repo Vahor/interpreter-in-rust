@@ -18,7 +18,7 @@ My knowledge of Rust is very limited, so I'm sure there are many things that cou
 - `cargo build --release` to build a release version
   - The output will be `target/release/interpreter`
 
-Once built, you can run the interpreter in two ways:
+Once built:
 - `interpreter -h` to see the help
 - `interpreter -f <file>` to run a file
   - You can fine some files in the `examples` folder
