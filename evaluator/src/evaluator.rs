@@ -528,6 +528,17 @@ mod tests {
             (r#"len("hello world")"#, Ok(ObjectType::Integer(11))),
             (r#"len(1)"#, Err(EvaluatorError::argument_type_not_supported("len", "1"))),
             (r#"len("one", "two")"#, Err(EvaluatorError::wrong_number_of_arguments(1, 2))),
+            (r#"len([1, 2, 3])"#, Ok(ObjectType::Integer(3))),
+            // first
+            (r#"let first = 5;"#, Err(EvaluatorError::built_in_function("first"))),
+            (r#"first([1, 2, 3])"#, Ok(ObjectType::Integer(1))),
+            (r#"first([])"#, Ok(ObjectType::Null)),
+            (r#"first(1)"#, Err(EvaluatorError::argument_type_not_supported("first", "1"))),
+            // last
+            (r#"let last = 5;"#, Err(EvaluatorError::built_in_function("last"))),
+            (r#"last([1, 2, 3])"#, Ok(ObjectType::Integer(3))),
+            (r#"last([])"#, Ok(ObjectType::Null)),
+            (r#"last(1)"#, Err(EvaluatorError::argument_type_not_supported("last", "1"))),
         ];
 
         tests.iter().for_each(|(input, result)| {

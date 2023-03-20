@@ -20,7 +20,12 @@ pub enum EvaluatorError {
         actual: usize,
     },
 
-    #[error("Argument to {function} not supported, got {actual}")]
+    #[error("Required argument {index} is missing")]
+    MissingArgument {
+        index: usize,
+    },
+
+    #[error("Argument to `{function}` not supported, got {actual}")]
     ArgumentTypeNotSupported {
         function: String,
         actual: String,
@@ -129,6 +134,12 @@ impl EvaluatorError {
         EvaluatorError::IndexOutOfBounds {
             index,
             size,
+        }
+    }
+
+    pub fn missing_argument(index: usize) -> EvaluatorError {
+        EvaluatorError::MissingArgument {
+            index,
         }
     }
 
