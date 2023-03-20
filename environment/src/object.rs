@@ -20,6 +20,8 @@ pub enum ObjectType {
     Return(Box<ObjectType>),
     Hash(Vec<(ObjectType, ObjectType)>),
 
+    Quote(Box<Expression>),
+
     Function {
         parameters: Vec<Expression>,
         body: BlockStatement,
@@ -43,6 +45,7 @@ impl PartialEq for ObjectType {
             (ObjectType::Builtin(_), ObjectType::Builtin(_)) => false,
             (ObjectType::Array(arr), ObjectType::Array(other_arr)) => arr == other_arr,
             (ObjectType::Hash(hash), ObjectType::Hash(other_hash)) => hash == other_hash,
+            (ObjectType::Quote(expr), ObjectType::Quote(other_expr)) => expr == other_expr,
             _ => false,
         }
     }
@@ -83,6 +86,9 @@ impl Object for ObjectType {
                 out.push_str(&hash.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join(", "));
                 out.push_str("}");
                 out
+            },
+            ObjectType::Quote(expr) => {
+                format!("quote({})", expr)
             }
         }
     }

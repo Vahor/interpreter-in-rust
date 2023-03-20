@@ -1,3 +1,4 @@
+use log::debug;
 use ast::expression::Expression;
 use ast::program::Program;
 use ast::statement::{BlockStatement, Statement};
@@ -6,6 +7,8 @@ use environment::object::ObjectType;
 use error::EvaluatorError;
 
 use crate::builtins::get_builtin;
+use crate::converter::convert_object_to_expression;
+use crate::modify::modify;
 
 pub fn eval(program: &Program, environment: &mut Environment) -> Result<ObjectType, EvaluatorError> {
     let result = eval_block_statement(environment, &program.statements)?;
@@ -72,6 +75,17 @@ fn eval_expression(environment: &mut Environment, expr: &Expression) -> Result<O
             environment: environment.clone(), // TODO: remove clone
         }),
         Expression::CallExpression { function, arguments } => {
+            // handle quote
+            if let Expression::Identifier(identifier) = function.as_ref() {
+                if identifier == "quote" {
+                    if arguments.len() != 1 {
+                        return Err(EvaluatorError::wrong_number_of_arguments2("quote", 1, arguments.len()));
+                    }
+                    return eval_quote_expression(environment,&arguments[0]);
+                }
+            }
+
+
             let evaluated = eval_expression(environment, function)?;
 
             let mut evaluated_arguments = vec![];
@@ -297,6 +311,33 @@ fn eval_index_expression(left: &ObjectType, index: &ObjectType) -> Result<Object
     }
 }
 
+fn eval_quote_expression(environment: &mut Environment, quote: &Expression) -> Result<ObjectType, EvaluatorError> {
+    let unquoted_quote = eval_unquote_calls(environment, quote.clone())?;
+    return Ok(ObjectType::Quote(Box::new(unquoted_quote)));
+}
+
+fn eval_unquote_calls(environment: &mut Environment, mut quote: Expression) -> Result<Expression, EvaluatorError> {
+    modify(Some(&mut quote), |expression| {
+        if let Expression::CallExpression { function, arguments } = expression {
+            if let Expression::Identifier(name) = function.as_ref() {
+                if name == "unquote" {
+                    if arguments.len() != 1 {
+                        return Err(EvaluatorError::wrong_number_of_arguments(1, arguments.len()));
+                    }
+
+                    // TODO: use environment
+                    let object = eval_expression(&mut Environment::new(), &arguments[0])?;
+                    *expression = convert_object_to_expression(object)?;
+                }
+            }
+        }
+
+        Ok(())
+    }).unwrap();
+
+    Ok(quote)
+}
+
 fn is_truthy(obj: &ObjectType) -> bool {
     match obj {
         ObjectType::Boolean(value) => *value,
@@ -308,6 +349,7 @@ fn is_truthy(obj: &ObjectType) -> bool {
 #[cfg(test)]
 mod tests {
     use log::debug;
+    use ast::expression::Expression::IntegerLiteral;
 
     use lexer::lexer::Lexer;
     use parser::parser::Parser;
@@ -328,6 +370,18 @@ mod tests {
         let program = program.unwrap();
 
         eval(&program, &mut env)
+    }
+
+    fn run_test_suite(tests: &Vec<(&str, Result<ObjectType, EvaluatorError>)>) {
+        tests.iter().for_each(|(input, result)| {
+            let evaluated = test_eval(input.to_string());
+            if let Err(e) = result {
+                let err = evaluated.err().unwrap();
+                assert_eq!(err, *e);
+            } else {
+                assert_eq!(evaluated, *result);
+            }
+        })
     }
 
     #[test]
@@ -439,35 +493,29 @@ mod tests {
     #[test]
     fn test_if_else_expressions() {
         let tests = vec![
-            ("if (true) {10}", ObjectType::Integer(10)),
-            ("if (false) {10}", ObjectType::Null),
-            ("if (1) {10}", ObjectType::Integer(10)),
-            ("if (1 < 2) {10}", ObjectType::Integer(10)),
-            ("if (1 > 2) {10}", ObjectType::Null),
-            ("if (1 > 2) {10} else {20}", ObjectType::Integer(20)),
-            ("if (1 < 2) {10} else {20}", ObjectType::Integer(10)),
+            ("if (true) {10}", Ok(ObjectType::Integer(10))),
+            ("if (false) {10}", Ok(ObjectType::Null)),
+            ("if (1) {10}", Ok(ObjectType::Integer(10))),
+            ("if (1 < 2) {10}", Ok(ObjectType::Integer(10))),
+            ("if (1 > 2) {10}", Ok(ObjectType::Null)),
+            ("if (1 > 2) {10} else {20}", Ok(ObjectType::Integer(20))),
+            ("if (1 < 2) {10} else {20}", Ok(ObjectType::Integer(10))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string()).unwrap();
-            assert_eq!(evaluated, *result);
-        })
+        run_test_suite(&tests);
     }
 
     #[test]
     fn test_return_statements() {
         let tests = vec![
-            ("return 10;", ObjectType::Integer(10)),
-            ("return 10; 9;", ObjectType::Integer(10)),
-            ("return 2 * 5; 9;", ObjectType::Integer(10)),
-            ("9; return 2 * 5; 9;", ObjectType::Integer(10)),
-            ("if (10 > 1) { if (10 > 1) { return 10; } return 1; }", ObjectType::Integer(10)),
+            ("return 10;", Ok(ObjectType::Integer(10))),
+            ("return 10; 9;", Ok(ObjectType::Integer(10))),
+            ("return 2 * 5; 9;", Ok(ObjectType::Integer(10))),
+            ("9; return 2 * 5; 9;", Ok(ObjectType::Integer(10))),
+            ("if (10 > 1) { if (10 > 1) { return 10; } return 1; }", Ok(ObjectType::Integer(10))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string()).unwrap();
-            assert_eq!(evaluated, *result);
-        })
+        run_test_suite(&tests);
     }
 
     #[test]
@@ -476,16 +524,13 @@ mod tests {
         let _ = env_logger::try_init();
 
         let tests = vec![
-            ("let a = 5; a;", ObjectType::Integer(5)),
-            ("let a = 5 * 5; a;", ObjectType::Integer(25)),
-            ("let a = 5; let b = a; b;", ObjectType::Integer(5)),
-            ("let a = 5; let b = a; let c = a + b + 5; c;", ObjectType::Integer(15)),
+            ("let a = 5; a;", Ok(ObjectType::Integer(5))),
+            ("let a = 5 * 5; a;", Ok(ObjectType::Integer(25))),
+            ("let a = 5; let b = a; b;", Ok(ObjectType::Integer(5))),
+            ("let a = 5; let b = a; let c = a + b + 5; c;", Ok(ObjectType::Integer(15))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string()).unwrap();
-            assert_eq!(evaluated, *result);
-        })
+        run_test_suite(&tests);
     }
 
     #[test]
@@ -511,18 +556,15 @@ mod tests {
         let _ = env_logger::try_init();
 
         let tests = vec![
-            ("let identity = fn(x) { x; }; identity(5);", ObjectType::Integer(5)),
-            ("let identity = fn(x) { return x; }; identity(5);", ObjectType::Integer(5)),
-            ("let double = fn(x) { x * 2; }; double(5);", ObjectType::Integer(10)),
-            ("let add = fn(x, y) { x + y; }; add(5, 5);", ObjectType::Integer(10)),
-            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", ObjectType::Integer(20)),
-            ("fn(x) { x; }(5)", ObjectType::Integer(5)),
+            ("let identity = fn(x) { x; }; identity(5);", Ok(ObjectType::Integer(5))),
+            ("let identity = fn(x) { return x; }; identity(5);", Ok(ObjectType::Integer(5))),
+            ("let double = fn(x) { x * 2; }; double(5);", Ok(ObjectType::Integer(10))),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", Ok(ObjectType::Integer(10))),
+            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", Ok(ObjectType::Integer(20))),
+            ("fn(x) { x; }(5)", Ok(ObjectType::Integer(5))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string()).unwrap();
-            assert_eq!(evaluated, *result);
-        })
+        run_test_suite(&tests);
     }
 
     #[test]
@@ -587,15 +629,9 @@ mod tests {
             (r#"rest(1)"#, Err(EvaluatorError::argument_type_not_supported("rest", "1"))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string());
-            if let Err(e) = result {
-                let err = evaluated.err().unwrap();
-                assert_eq!(err, *e);
-            } else {
-                assert_eq!(evaluated, *result);
-            }
-        })
+        run_test_suite(&tests);
+
+
     }
 
     #[test]
@@ -618,15 +654,7 @@ mod tests {
             (r#""Hello"[9]"#, Err(EvaluatorError::index_out_of_bounds(9, 5))),
         ];
 
-        tests.iter().for_each(|(input, result)| {
-            let evaluated = test_eval(input.to_string());
-            if let Err(e) = result {
-                let err = evaluated.err().unwrap();
-                assert_eq!(err, *e);
-            } else {
-                assert_eq!(evaluated, *result);
-            }
-        })
+        run_test_suite(&tests);
     }
 
     #[test]
@@ -639,17 +667,31 @@ mod tests {
             (r#"{1: 2 + 2, 3: 4}"#, Ok(ObjectType::Hash(vec![(ObjectType::Integer(1), ObjectType::Integer(4)), (ObjectType::Integer(3), ObjectType::Integer(4))]))),
             (r#"{1: 2, 3: 4}[1]"#, Ok(ObjectType::Integer(2))),
             (r#"{1: 2, 3: 4}[3]"#, Ok(ObjectType::Integer(4))),
-            // (r#"{1: 2, 3: 4}[2]"#, Ok(ObjectType::Null)),
+            (r#"{1: 2, 3: 4}[2]"#, Err(EvaluatorError::no_such_key("2".to_string()))),
+        ];
+
+        run_test_suite(&tests);
+    }
+
+    #[test]
+    fn test_quote() {
+        std::env::set_var("RUST_LOG", "trace");
+        let _ = env_logger::try_init();
+
+        let tests = vec![
+            (r#"quote(1)"#, "quote(1)"),
+            (r#"quote(1 + 2)"#, "quote((1 + 2))"),
+            (r#"quote(foobar)"#, "quote(foobar)"),
+            (r#"quote(foobar + barfoo)"#, "quote((foobar + barfoo))"),
+            (r#"quote(unquote(4))"#, "quote(4)"),
+            (r#"quote(unquote(4 + 4))"#, "quote(8)"),
+            (r#"quote(8 + unquote(4 + 4))"#, "quote((8 + 8))"),
+            (r#"quote(unquote(4 + 4) + 8)"#, "quote((8 + 8))"),
         ];
 
         tests.iter().for_each(|(input, result)| {
             let evaluated = test_eval(input.to_string());
-            if let Err(e) = result {
-                let err = evaluated.err().unwrap();
-                assert_eq!(err, *e);
-            } else {
-                assert_eq!(evaluated, *result);
-            }
-        })
+            assert_eq!(evaluated.unwrap().to_string(), result.to_string());
+        });
     }
 }

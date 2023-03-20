@@ -14,8 +14,9 @@ pub enum EvaluatorError {
         actual: String,
     },
 
-    #[error("Wrong number of arguments, expected {expected}, got {actual}")]
+    #[error("Wrong number of arguments for `{function}`: expected {expected}, got {actual}")]
     WrongNumberOfArguments {
+        function: String,
         expected: usize,
         actual: usize,
     },
@@ -72,6 +73,11 @@ pub enum EvaluatorError {
         actual: String,
     },
 
+    #[error("Cannot convert object `{actual}` to expression")]
+    CannotConvertObjectToExpression {
+        actual: String,
+    },
+
     #[error("Unknown error")]
     UnknownError,
 }
@@ -97,8 +103,17 @@ impl EvaluatorError {
         }
     }
 
+    pub fn wrong_number_of_arguments2(function: &str, expected: usize, actual: usize) -> EvaluatorError {
+        EvaluatorError::WrongNumberOfArguments {
+            function: function.to_string(),
+            expected,
+            actual,
+        }
+
+    }
     pub fn wrong_number_of_arguments(expected: usize, actual: usize) -> EvaluatorError {
         EvaluatorError::WrongNumberOfArguments {
+            function: "unknown".to_string(),
             expected,
             actual,
         }
@@ -161,6 +176,12 @@ impl EvaluatorError {
 
     pub fn key_not_supported(actual: String) -> EvaluatorError {
         EvaluatorError::KeyNotSupported {
+            actual,
+        }
+    }
+
+    pub fn conversion_error(actual: String) -> EvaluatorError {
+        EvaluatorError::CannotConvertObjectToExpression {
             actual,
         }
     }
